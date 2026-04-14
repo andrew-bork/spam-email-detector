@@ -20,17 +20,14 @@ Email spam remains a persistent cybersecurity and productivity problem. Traditio
 
 **Features used:** Email body, email subject, email sender
 
----
-
-## Planned Model / System Approach
-The project evaluates multiple approaches and compares their performance:
-
-1. **RNN (this milestone)** — PyTorch GRU-based recurrent neural network with lear
----
-
 ## Current Implementation Progress
 - [x] Project structure initialized
-- [ ] PyTorch RNN model defined (`models/rnn_model.py`)
+- [x] PyTorch RNN model defined (`src/rnn.py`)
+- [x] Train script implemented
+- [x] Train RNN implemented
+- [ ] LLM Embeddings + Neural Network
+- [ ] LLM Scoring
+- [ ] Custom Transformer Architecture
 ---
 
 ## References
