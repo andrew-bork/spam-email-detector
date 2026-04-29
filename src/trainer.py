@@ -3,16 +3,23 @@ from tqdm import tqdm
 import numpy as np
 from sklearn.metrics import f1_score
 from typing import Iterable
+from typing import Any
 
+from sentence_transformers import SentenceTransformer
+
+sentence_embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
 class Trainer:
+    def __init__(self, model: Any):
+        raise NotImplemented()
+    
     def train(self, train_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], val_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], **kwargs) -> tuple[list[float], list[float]]:
         raise NotImplemented()
     
-    def evaluate(self, data_loader: Iterable[tuple[torch.Tensor, torch.Tensor]]) -> dict[str, any]:
+    def evaluate(self, data_loader: Iterable[tuple[torch.Tensor, torch.Tensor]]) -> dict[str, Any]:
         raise NotImplemented()
     
-    def build_loaders(self, train_dataset, val_dataset, batch_size=1, **kwargs) -> tuple[Iterable[tuple[torch.Tensor, torch.Tensor]], Iterable[tuple[torch.Tensor, torch.Tensor]]]:
+    def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, **kwargs) -> tuple[Iterable[tuple[torch.Tensor, torch.Tensor]], Iterable[tuple[torch.Tensor, torch.Tensor]]]:
         raise NotImplemented()
 
 class SklearnTrainer(Trainer):
@@ -22,12 +29,12 @@ class SklearnTrainer(Trainer):
     def forward(self, x: np.ndarray) -> np.ndarray:
         return self.model.predict(x)
 
-    def build_loaders(self, train_dataset, val_dataset, **kwargs):
-        return [train_dataset], [val_dataset]
+    def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, **kwargs): # type: ignore
+        return torch.utils.data.DataLoader(train_dataset, batch_size=len(train_dataset), shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
 
     def train(self, train_loader, val_loader, **kwargs):
-        for (X_batch, y_batch) in tqdm(train_loader):
-            self.model.partial_fit(X_batch, y_batch)
+        X, y = next(iter(train_loader))
+        self.model.fit(sentence_embedding_model.encode(X), y)
         return [], []
     
     def evaluate(self, data_loader):
@@ -35,8 +42,8 @@ class SklearnTrainer(Trainer):
         all_targets = []
 
         for X_batch, y_batch in tqdm(data_loader):
-            outputs = self.forward(X_batch.numpy())
-            predictions = np.argmax(outputs, dim=1)
+            outputs = self.forward(sentence_embedding_model.encode(X_batch))
+            predictions = outputs
             all_preds.append(predictions)
             all_targets.append(y_batch.numpy())
         
@@ -56,11 +63,18 @@ class SklearnTrainer(Trainer):
         return metrics
     
 
+# class KNNTrainer(SklearnTrainer):
+#     def forward(self, x: np.ndarray) -> np.ndarray:
+#         return self.model.kneighbors(X)
+    
+    
+    
+    
 class TorchTrainer(Trainer):
     def __init__(self, model: torch.nn.Module):
         self.model = model
 
-    def build_loaders(self, train_dataset, val_dataset, batch_size=1, **kwargs):
+    def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, batch_size=1, **kwargs):
         return torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     def train(self, train_loader, val_loader, device=None, epochs=100, lr=0.1, weight_decay=0.01, **kwargs):
@@ -79,6 +93,7 @@ class TorchTrainer(Trainer):
             epoch_loss = 0.0
             model.train()
             for (X_batch, y_batch) in tqdm(train_loader):
+                X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 optimizer.zero_grad()
                 outputs = model(X_batch)
@@ -97,6 +112,7 @@ class TorchTrainer(Trainer):
             val_loss = 0.0
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
+                    X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                     outputs = model(X_batch)
                     val_loss += criterion(outputs, y_batch).item()
@@ -111,3 +127,39 @@ class TorchTrainer(Trainer):
                 print(f"Epoch [{epoch+1}/{epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Accuracy: {100*total_correct/total:.2f}%")
         
         return train_losses, val_losses
+
+    
+    def evaluate(self, data_loader):
+        # if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = self.model.to(device)
+        
+        all_preds = []
+        all_targets = []
+        
+        total_loss = 0
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for X_batch, y_batch in tqdm(data_loader):
+            X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = self.model.forward(X_batch)
+            total_loss += criterion(outputs, y_batch).item()
+            predictions = torch.argmax(outputs, dim=1)
+            all_preds.append(predictions.cpu().numpy())
+            all_targets.append(y_batch.cpu().numpy())
+        
+        all_preds = np.concat(all_preds)
+        all_targets = np.concat(all_targets)
+        
+        accuracy = (all_preds == all_targets).sum() / len(all_preds)
+        f1 = f1_score(all_targets, all_preds, average="macro")
+        
+        
+        metrics = {
+            'loss': total_loss / len(data_loader),
+            'accuracy': accuracy,
+            'f1_macro': f1
+        }
+        
+        return metrics

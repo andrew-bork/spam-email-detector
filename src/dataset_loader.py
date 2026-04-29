@@ -23,6 +23,25 @@ class KaggleSpamDataset(Dataset):
 
         return sample
 
+# class DatasetTransformer(Dataset):
+#     def __init__(self, dataset):
+#         self.dataset = dataset
+
+#     def __len__(self):
+#         return len(self.data)
+
+#     def __getitem__(self, idx):
+#         if torch.is_tensor(idx):
+#             idx = idx.tolist()
+            
+#         sample = (self.data.iloc[idx, 0], self.data.iloc[idx, 1])
+
+#         if self.transform:
+#             sample = self.transform.forward(sample)
+
+#         return sample
+
+
 class TokenizerTransform(torch.nn.Module):
     def __init__(self, tokenizer):
         super(TokenizerTransform, self).__init__()
