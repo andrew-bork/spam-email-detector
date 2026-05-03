@@ -1,13 +1,9 @@
 import torch
 from tqdm import tqdm
 import numpy as np
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_score, recall_score
 from typing import Iterable
 from typing import Any
-
-from sentence_transformers import SentenceTransformer
-
-sentence_embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
 class Trainer:
     def __init__(self, model: Any):
@@ -34,7 +30,7 @@ class SklearnTrainer(Trainer):
 
     def train(self, train_loader, val_loader, **kwargs):
         X, y = next(iter(train_loader))
-        self.model.fit(sentence_embedding_model.encode(X), y)
+        self.model.fit(X, y)
         return [], []
     
     def evaluate(self, data_loader):
@@ -42,7 +38,8 @@ class SklearnTrainer(Trainer):
         all_targets = []
 
         for X_batch, y_batch in tqdm(data_loader):
-            outputs = self.forward(sentence_embedding_model.encode(X_batch))
+            # outputs = self.forward(sentence_embedding_model.encode(X_batch))
+            outputs = self.forward(X_batch)
             predictions = outputs
             all_preds.append(predictions)
             all_targets.append(y_batch.numpy())
@@ -52,12 +49,16 @@ class SklearnTrainer(Trainer):
         
         accuracy = (all_preds == all_targets).sum() / len(all_preds)
         f1 = f1_score(all_targets, all_preds, average="macro")
+        precision = precision_score(all_targets, all_preds, average="macro")
+        recall = recall_score(all_targets, all_preds, average="macro")
         
         
         metrics = {
             'loss': 0,
             'accuracy': accuracy,
-            'f1_macro': f1
+            'f1_macro': f1,
+            "precision_macro": precision,
+            "recall_macro": recall
         }
         
         return metrics
@@ -93,7 +94,7 @@ class TorchTrainer(Trainer):
             epoch_loss = 0.0
             model.train()
             for (X_batch, y_batch) in tqdm(train_loader):
-                X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
+                X_batch = torch.as_tensor(X_batch)
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 optimizer.zero_grad()
                 outputs = model(X_batch)
@@ -112,7 +113,7 @@ class TorchTrainer(Trainer):
             val_loss = 0.0
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
-                    X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
+                    X_batch = torch.as_tensor(X_batch)
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                     outputs = model(X_batch)
                     val_loss += criterion(outputs, y_batch).item()
@@ -141,7 +142,7 @@ class TorchTrainer(Trainer):
         criterion = torch.nn.CrossEntropyLoss()
 
         for X_batch, y_batch in tqdm(data_loader):
-            X_batch = torch.as_tensor(sentence_embedding_model.encode(X_batch))
+            X_batch = torch.as_tensor(X_batch)
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             outputs = self.model.forward(X_batch)
             total_loss += criterion(outputs, y_batch).item()
@@ -154,12 +155,16 @@ class TorchTrainer(Trainer):
         
         accuracy = (all_preds == all_targets).sum() / len(all_preds)
         f1 = f1_score(all_targets, all_preds, average="macro")
+        precision = precision_score(all_targets, all_preds, average="macro")
+        recall = recall_score(all_targets, all_preds, average="macro")
         
         
         metrics = {
             'loss': total_loss / len(data_loader),
             'accuracy': accuracy,
-            'f1_macro': f1
+            'f1_macro': f1,
+            "precision_macro": precision,
+            "recall_macro": recall
         }
         
         return metrics
