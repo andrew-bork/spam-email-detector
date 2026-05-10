@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LSTM Training Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f5f4f0; --bg3: #eceae3;
+    --text: #1a1a18; --text2: #5f5e5a; --text3: #888780;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --accent: #BA7517; --accent-bg: #FAEEDA; --accent-text: #633806;
+    --success: #3B6D11; --success-bg: #EAF3DE;
+    --danger: #A32D2D; --danger-bg: #FCEBEB;
+    --info: #185FA5; --info-bg: #E6F1FB;
+    --radius: 8px; --radius-lg: 12px;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --chart-train: #BA7517; --chart-val: #185FA5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+      --text: #e8e6df; --text2: #b4b2a9; --text3: #888780;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18);
+      --accent: #FAC775; --accent-bg: #412402; --accent-text: #FAC775;
+      --success: #C0DD97; --success-bg: #173404;
+      --danger: #F09595; --danger-bg: #501313;
+      --info: #85B7EB; --info-bg: #042C53;
+      --chart-train: #FAC775; --chart-val: #85B7EB;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Helvetica Neue', sans-serif; font-size: 14px; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .shell { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 48px 1fr; min-height: 100vh; }
+  header { grid-column: 1/-1; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 0.5px solid var(--border2); background: var(--bg); }
+  header h1 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); flex-shrink: 0; transition: background 0.3s; }
+  .dot.running { background: var(--accent); animation: pulse 1.2s infinite; }
+  .dot.done { background: var(--success); }
+  .dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-text { font-size: 12px; color: var(--text3); margin-left: auto; font-family: var(--mono); }
+
+  /* Sidebar */
+  aside { border-right: 0.5px solid var(--border); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; background: var(--bg2); }
+  .section-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .section-title i { font-size: 13px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  label { font-size: 12px; color: var(--text2); }
+  input[type=text], input[type=number] {
+    height: 32px; padding: 0 8px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-size: 13px; width: 100%;
+    font-family: var(--mono);
+  }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .range-row { display: flex; align-items: center; gap: 8px; }
+  .range-val { font-size: 12px; font-family: var(--mono); color: var(--accent); min-width: 36px; text-align: right; }
+
+  /* Main panel */
+  main { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+  nav {
+    color: #aaaaaa;
+  }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 8px; }
+  button {
+    height: 36px; padding: 0 16px; border-radius: var(--radius); border: 0.5px solid var(--border2);
+    background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; transition: background 0.15s, opacity 0.15s;
+  }
+  button:hover { background: var(--bg3); }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-text); font-weight: 500; }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent-bg) 80%, var(--accent)); }
+  .btn-danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+
+  /* Metric cards */
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .metric-card { background: var(--bg2); border-radius: var(--radius); padding: 12px 14px; }
+  .metric-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-val { font-size: 22px; font-weight: 500; font-family: var(--mono); color: var(--text); line-height: 1; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+  .metric-val.good { color: var(--success); }
+  .metric-val.muted { color: var(--text3); }
+
+  /* Chart */
+  .chart-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .chart-title { font-size: 13px; font-weight: 500; }
+  .legend { display: flex; gap: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+
+  /* Log */
+  .log-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .log-header { padding: 10px 14px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .log-header span { font-size: 13px; font-weight: 500; }
+  #log { height: 160px; overflow-y: auto; padding: 10px 14px; font-family: var(--mono); font-size: 11.5px; color: var(--text2); line-height: 1.7; background: var(--bg3); }
+  .log-line { display: block; }
+  .log-line.epoch { color: var(--accent-text); }
+  .log-line.error { color: var(--danger); }
+  @media (prefers-color-scheme: dark) { .log-line.epoch { color: var(--accent); } }
+
+  /* Demo banner */
+  .demo-banner { background: var(--info-bg); border: 0.5px solid var(--info); border-radius: var(--radius); padding: 8px 12px; font-size: 12px; color: var(--info); display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="dot" id="dot"></div>
+    <h1>LSTM Training Dashboard</h1>
+    <nav>
+      <button onclick="loadPage('inference')">Inference</button>
+    </nav>
+    <span class="status-text" id="status-text">idle</span>
+  </header>
+
+  <!-- Sidebar: config -->
+  <aside>
+    <div>
+      <div class="section-title"><i class="ti ti-database" aria-hidden="true"></i> Data</div>
+      <div class="field"><label>Data path</label><input type="text" id="data_path" value="./data/emails.csv" /></div>
+      <div class="field"><label>Tokenizer</label><input type="text" id="tokenizer" value="bert-base-cased" /></div>
+      <div class="field"><label>Vocab size</label><input type="number" id="vocab_size" value="30522" /></div>
+      <div class="field"><label>Max sequence length</label>
+        <div class="range-row"><input type="range" id="max_seq_len" min="64" max="512" step="32" value="256" oninput="syncRange(this,'max_seq_len_v')"/><span class="range-val" id="max_seq_len_v">256</span></div>
+      </div>
+      <div class="field"><label>Train split</label>
+        <div class="range-row"><input type="range" id="train_split" min="0.5" max="0.95" step="0.05" value="0.8" oninput="syncRange(this,'train_split_v')"/><span class="range-val" id="train_split_v">0.80</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title"><i class="ti ti-cpu" aria-hidden="true"></i> Model</div>
+      <div class="field"><label>Embedding dim</label>
+        <div class="range-row"><input type="range" id="embedding_dim" min="32" max="256" step="32" value="128" oninput="syncRange(this,'embedding_dim_v')"/><span class="range-val" id="embedding_dim_v">128</span></div>
+      </div>
+      <div class="field"><label>Hidden size</label>
+        <div class="range-row"><input type="range" id="hidden_size" min="64" max="512" step="64" value="256" oninput="syncRange(this,'hidden_size_v')"/><span class="range-val" id="hidden_size_v">256</span></div>
+      </div>
+      <div class="field"><label>LSTM layers</label>
+        <div class="range-row"><input type="range" id="num_layers" min="1" max="4" step="1" value="2" oninput="syncRange(this,'num_layers_v')"/><span class="range-val" id="num_layers_v">2</span></div>
+      </div>
+      <div class="field"><label>Dropout</label>
+        <div class="range-row"><input type="range" id="dropout" min="0" max="0.6" step="0.05" value="0.3" oninput="syncRange(this,'dropout_v')"/><span class="range-val" id="dropout_v">0.30</span></div>
+      </div>
+      <div class="field"><label>Output classes</label><input type="number" id="output_size" value="2" /></div>
+    </div>
+
+    <div>
+      <div class="section-title"><i class="ti ti-adjustments" aria-hidden="true"></i> Training</div>
+      <div class="field"><label>Epochs</label><input type="number" id="epochs" value="20" /></div>
+      <div class="field"><label>Batch size</label><input type="number" id="batch_size" value="64" /></div>
+      <div class="field"><label>Learning rate</label><input type="text" id="lr" value="0.001" /></div>
+      <div class="field"><label>Weight decay</label><input type="text" id="weight_decay" value="0.00001" /></div>
+    </div>
+  </aside>
+
+  <!-- Main panel -->
+  <main>
+    <div class="demo-banner" id="demo-banner" style="display:none">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <span>Backend not detected — running in <strong>demo mode</strong> with simulated training.</span>
+    </div>
+
+    <!-- Controls -->
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-start" onclick="startTraining()">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Start training
+      </button>
+      <button class="btn-danger" id="btn-stop" onclick="stopTraining()" disabled>
+        <i class="ti ti-player-stop" aria-hidden="true"></i> Stop
+      </button>
+      <button id="btn-reset" onclick="resetUI()">
+        <i class="ti ti-refresh" aria-hidden="true"></i> Reset
+      </button>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Val accuracy</div>
+        <div class="metric-val muted" id="m-acc">—</div>
+        <div class="metric-sub" id="m-acc-train">train —</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Val F1 macro</div>
+        <div class="metric-val muted" id="m-f1">—</div>
+        <div class="metric-sub" id="m-f1-train">train —</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Val precision</div>
+        <div class="metric-val muted" id="m-prec">—</div>
+        <div class="metric-sub" id="m-prec-train">train —</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Val recall</div>
+        <div class="metric-val muted" id="m-rec">—</div>
+        <div class="metric-sub" id="m-rec-train">train —</div>
+      </div>
+    </div>
+
+    <!-- Loss curve -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Training &amp; validation loss</span>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--chart-train)"></div>Train</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--chart-val); opacity:0.6"></div>Val</div>
+        </div>
+      </div>
+      <div style="position:relative; height:200px">
+        <canvas id="lossChart" role="img" aria-label="Line chart of training and validation loss per epoch">Loss chart will update as training progresses.</canvas>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="log-card">
+      <div class="log-header">
+        <i class="ti ti-terminal-2" aria-hidden="true" style="font-size:15px;color:var(--text3)"></i>
+        <span>Training log</span>
+      </div>
+      <div id="log"></div>
+    </div>
+  </main>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+
+function syncRange(el, outId) {
+  const v = parseFloat(el.value);
+  $(outId).textContent = Number.isInteger(v) ? v : v.toFixed(2);
+}
+
+function cfg() {
+  return {
+    data_path:    $('data_path').value,
+    tokenizer:    $('tokenizer').value,
+    vocab_size:   +$('vocab_size').value,
+    max_seq_len:  +$('max_seq_len').value,
+    train_split:  +$('train_split').value,
+    embedding_dim:+$('embedding_dim').value,
+    hidden_size:  +$('hidden_size').value,
+    num_layers:   +$('num_layers').value,
+    dropout:      +$('dropout').value,
+    output_size:  +$('output_size').value,
+    epochs:       +$('epochs').value,
+    batch_size:   +$('batch_size').value,
+    lr:           +$('lr').value,
+    weight_decay: +$('weight_decay').value,
+  };
+}
+
+// ── Chart ────────────────────────────────────────────────────────────────────
+const trainColor = getComputedStyle(document.documentElement).getPropertyValue('--chart-train').trim() || '#BA7517';
+const valColor   = getComputedStyle(document.documentElement).getPropertyValue('--chart-val').trim()   || '#185FA5';
+const gridColor  = isDark() ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+
+const chart = new Chart($('lossChart'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Train', data: [], borderColor: trainColor, backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, tension: 0.3 },
+      { label: 'Val',   data: [], borderColor: valColor,   backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [4,3] },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 200 },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font: { size: 11 }, color: isDark() ? '#888780' : '#888780', maxTicksLimit: 10 },
+           grid: { color: gridColor }, title: { display: true, text: 'epoch', font: { size: 11 }, color: '#888780' } },
+      y: { ticks: { font: { size: 11 }, color: isDark() ? '#888780' : '#888780' },
+           grid: { color: gridColor }, title: { display: true, text: 'loss', font: { size: 11 }, color: '#888780' } }
+    }
+  }
+});
+
+function pushChartPoint(epoch, trainLoss, valLoss) {
+  chart.data.labels.push(epoch);
+  chart.data.datasets[0].data.push(trainLoss);
+  chart.data.datasets[1].data.push(valLoss);
+  chart.update('none');
+}
+
+// ── Log ──────────────────────────────────────────────────────────────────────
+function appendLog(msg, cls='') {
+  const line = document.createElement('span');
+  line.className = 'log-line ' + cls;
+  line.textContent = msg;
+  $('log').appendChild(line);
+  $('log').appendChild(document.createElement('br'));
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+// ── Status / metrics UI ──────────────────────────────────────────────────────
+function setDot(s) {
+  $('dot').className = 'dot ' + s;
+  $('status-text').textContent = s;
+}
+
+function setRunning(running) {
+  $('btn-start').disabled = running;
+  $('btn-stop').disabled  = !running;
+}
+
+function setMetrics(val, train) {
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const fmt = v => v.toFixed(3);
+  $('m-acc').textContent  = pct(val.accuracy);   $('m-acc').className  = 'metric-val good';
+  $('m-f1').textContent   = fmt(val.f1_macro);    $('m-f1').className   = 'metric-val good';
+  $('m-prec').textContent = fmt(val.precision_macro); $('m-prec').className = 'metric-val good';
+  $('m-rec').textContent  = fmt(val.recall_macro); $('m-rec').className  = 'metric-val good';
+  $('m-acc-train').textContent  = 'train ' + pct(train.accuracy);
+  $('m-f1-train').textContent   = 'train ' + fmt(train.f1_macro);
+  $('m-prec-train').textContent = 'train ' + fmt(train.precision_macro);
+  $('m-rec-train').textContent  = 'train ' + fmt(train.recall_macro);
+}
+
+function resetUI() {
+  chart.data.labels = []; chart.data.datasets[0].data = []; chart.data.datasets[1].data = [];
+  chart.update('none');
+  $('log').innerHTML = '';
+  ['m-acc','m-f1','m-prec','m-rec'].forEach(id => { $(id).textContent = '—'; $(id).className = 'metric-val muted'; });
+  ['m-acc-train','m-f1-train','m-prec-train','m-rec-train'].forEach(id => $(id).textContent = 'train —');
+  setDot(''); setRunning(false);
+}
+
+// ── SSE connection ────────────────────────────────────────────────────────────
+let sse = null;
+function connectSSE() {
+  sse = new EventSource('/api/stream');
+  sse.addEventListener('epoch', e => {
+    const d = JSON.parse(e.data);
+    pushChartPoint(d.epoch, d.train_loss, d.val_loss);
+    appendLog(`Epoch ${d.epoch}/${d.total}  train: ${d.train_loss}  val: ${d.val_loss}  acc: ${d.val_acc}%`, 'epoch');
+  });
+  sse.addEventListener('log', e => appendLog(JSON.parse(e.data).msg));
+  sse.addEventListener('status', e => {
+    const d = JSON.parse(e.data);
+    setDot(d.status);
+    appendLog('→ ' + d.msg);
+    if (d.status !== 'running') { setRunning(false); sse && sse.close(); }
+  });
+  sse.addEventListener('metrics', e => {
+    const d = JSON.parse(e.data);
+    setMetrics(d.val, d.train);
+  });
+  sse.onerror = () => { sse.close(); };
+}
+
+// ── Backend check + demo mode ─────────────────────────────────────────────────
+let demoMode = false;
+
+async function checkBackend() {
+  try {
+    const r = await fetch('/api/status', { signal: AbortSignal.timeout(1500) });
+    return r.ok;
+  } catch { return false; }
+}
+
+// Demo: simulated training (realistic loss curves)
+function runDemo(config) {
+  setRunning(true); setDot('running'); appendLog('Demo mode: simulating training…');
+  let ep = 0; const total = config.epochs;
+  let tl = 0.65 + Math.random() * 0.2, vl = 0.7 + Math.random() * 0.2;
+  const iv = setInterval(() => {
+    ep++;
+    tl = Math.max(0.05, tl * (0.88 + Math.random() * 0.06));
+    vl = Math.max(0.08, vl * (0.90 + Math.random() * 0.06) + (Math.random() - 0.5) * 0.005);
+    const acc = Math.min(0.99, 0.5 + (1 - tl) * 0.55);
+    pushChartPoint(ep, +tl.toFixed(4), +vl.toFixed(4));
+    appendLog(`Epoch ${ep}/${total}  train: ${tl.toFixed(4)}  val: ${vl.toFixed(4)}  acc: ${(acc*100).toFixed(1)}%`, 'epoch');
+    if (ep >= total) {
+      clearInterval(iv);
+      const valF1 = +(acc - 0.02 + Math.random() * 0.03).toFixed(4);
+      setMetrics(
+        { accuracy: acc, f1_macro: valF1, precision_macro: +(valF1+0.01).toFixed(4), recall_macro: +(valF1-0.01).toFixed(4) },
+        { accuracy: acc+0.02, f1_macro: valF1+0.02, precision_macro: valF1+0.02, recall_macro: valF1+0.01 }
+      );
+      setDot('done'); setRunning(false);
+      appendLog('→ Demo training complete.');
+    }
+  }, 280);
+  window._demoInterval = iv;
+}
+
+// ── Public actions ────────────────────────────────────────────────────────────
+async function startTraining() {
+  resetUI();
+  const config = cfg();
+  if (demoMode) { runDemo(config); return; }
+  try {
+    const r = await fetch('/api/train', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(config) });
+    if (!r.ok) { const e = await r.json(); appendLog('Error: ' + e.error, 'error'); return; }
+    setRunning(true); setDot('running');
+    connectSSE();
+  } catch (e) { appendLog('Cannot reach backend: ' + e.message, 'error'); }
+}
+
+async function stopTraining() {
+  if (demoMode) { clearInterval(window._demoInterval); setDot('stopped'); setRunning(false); appendLog('→ Stopped.'); return; }
+  await fetch('/api/stop', { method: 'POST' });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const ok = await checkBackend();
+  if (!ok) { demoMode = true; $('demo-banner').style.display = 'flex'; }
+})();
+
+function loadPage(page) {
+}
+</script>
+</body>
+</html>

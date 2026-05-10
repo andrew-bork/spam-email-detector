@@ -22,7 +22,7 @@ LOG_INTERVAL = 1
 
 classifier_info: list[tuple[str, Any, type[Trainer], dict[str, Any]]] = [
     # ("Simple RNN", SimpleRNN, TorchTrainer, {"embedding_input_size": 30522}),
-    ("SVM", svm.SVC, SklearnTrainer, {}),
+    ("3", svm.SVC, SklearnTrainer, {}),
     ("Nearest Neighbors", KNeighborsClassifier, SklearnTrainer, { }),
     ("Naive Bayes", GaussianNB, SklearnTrainer, {}),
     ("Logistic Regression", LinearRegression, TorchTrainer, { "input_size": 384, "output_size": 2 }),
