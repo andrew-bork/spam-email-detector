@@ -1,32 +1,37 @@
+<script>
+	import CardTitle from '$lib/components/card/card-title.svelte';
+	import Card from '$lib/components/card/card.svelte';
+	import SpecialButton from '$lib/components/button/special-button.svelte';
+	import TextArea from '$lib/components/input/text-area.svelte';
+
+
+
+	let inferenceInput = $state("");
+	const canRunInference = $derived(0 < inferenceInput.trim().length);
+
+</script>
+
 <div class="shell">
 	<aside>
 		<h1>Inference</h1>
 	</aside>
-	<main>
+	<main class="page">
 		<div class="page-title">Run Inference</div>
-		<div class="page-sub">Classify text with all models at once, or pick a specific one.</div>
+		<div class="page-sub">Classify text using all models.</div>
 
-		<!-- Input card -->
-		<div class="card">
-			<div class="card-title">Input</div>
-			<div class="card-title" style="margin-bottom:8px; font-size:10px;">Try an example</div>
-			<div class="example-strip">
-				<!-- <span class="ex-pill" onclick="loadExample(this)">Congratulations! You've won a $1,000 gift card. Click here NOW to claim your prize.</span>
-        <span class="ex-pill" onclick="loadExample(this)">Hi, are we still on for the 3pm sync tomorrow?</span>
-        <span class="ex-pill" onclick="loadExample(this)">URGENT: Your account has been compromised. Verify your details immediately to avoid suspension.</span>
-        <span class="ex-pill" onclick="loadExample(this)">Can you review the pull request I submitted earlier? No rush at all.</span>
-        <span class="ex-pill" onclick="loadExample(this)">Free entry in 2 a wkly comp to win FA Cup tickets! Txt FA to 87121</span>
-        <span class="ex-pill" onclick="loadExample(this)">The quarterly report is attached. Let me know if you have questions.</span>
-        <span class="ex-pill" onclick="loadExample(this)">You have been selected for an EXCLUSIVE offer. Act now before it expires!</span> -->
-			</div>
+		<Card>
+			<CardTitle>Input</CardTitle>
+			<CardTitle style="margin-bottom:8px; font-size:10px;">Try an example</CardTitle>
 
 			<div style="position: relative;">
-				<textarea
-					id="infer-text"
+				<TextArea
 					placeholder="Paste or type a message to classify…"
-					// oninput="onInferInput()"
-					rows="4"
-				></textarea>
+					rows={10}
+					oninput={(e) => {
+						inferenceInput = e.currentTarget.value;
+					}}
+					value={inferenceInput}
+				></TextArea>
 				<span
 					id="infer-charcount"
 					style="position:absolute; bottom:10px; right:12px; font-size:10px; font-family:var(--font-mono); color:var(--text3); pointer-events:none;"
@@ -36,21 +41,33 @@
 			<div id="token-hint" class="token-preview" style="margin-top:6px;"></div>
 
 			<div class="btn-row">
-				<button class="btn btn-run-all" id="run-all-btn" disabled>
+				<SpecialButton 
+					disabled={!canRunInference}
+					onclick={() => {
+						alert(inferenceInput);
+					}}
+				>
 					<svg width="13" height="13" viewBox="0 0 16 16" fill="white"
 						><path d="M2 4h12M2 8h12M2 12h12" stroke="white" stroke-width="1.5" fill="none" /></svg
 					>
 					Run All Classifiers
-				</button>
-				<button class="btn btn-primary" id="infer-btn" disabled>
-					<svg width="12" height="12" viewBox="0 0 16 16" fill="white"
-						><polygon points="3,2 13,8 3,14" /></svg
+				</SpecialButton>
+
+				<!-- <PrimaryButton disabled>
+					<svg width="13" height="13" viewBox="0 0 16 16" fill="white"
+						><path d="M2 4h12M2 8h12M2 12h12" stroke="white" stroke-width="1.5" fill="none" /></svg
 					>
-					Run Selected
-				</button>
-				<button class="btn btn-secondary">Clear</button>
+					Run All Classifiers
+				</PrimaryButton> -->
+
+				<button 
+					class="btn btn-secondary"
+					onclick={() => {
+						inferenceInput = "";
+					}}
+				>Clear</button>
 			</div>
-		</div>
+		</Card>
 
 		<!-- Results area -->
 		<div id="infer-result-area"></div>
@@ -58,6 +75,18 @@
 </div>
 
 <style>
+	.page-title {
+		font-size: 20px;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		margin-bottom: 4px;
+	}
+	.page-sub {
+		font-size: 13px;
+		color: var(--text2);
+		margin-bottom: 28px;
+	}
+	
 	/* Layout */
 	.shell {
 		height: 100%;
@@ -92,19 +121,35 @@
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
-	.btn-primary {
-		background: var(--accent-bg);
-		border-color: var(--accent);
-		color: var(--accent-text);
-		font-weight: 500;
+	/* ── Buttons ── */
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding: 9px 18px;
+		border-radius: var(--radius);
+		border: none;
+		font-family: var(--font-sans);
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s;
 	}
-	.btn-primary:hover {
-		background: color-mix(in srgb, var(--accent-bg) 80%, var(--accent));
+	.btn-secondary {
+		background: var(--bg3);
+		color: var(--text);
+		border: 1px solid var(--border);
 	}
-	.btn-danger {
-		background: var(--danger-bg);
-		border-color: var(--danger);
-		color: var(--danger);
+	.btn-secondary:hover {
+		background: var(--bg4);
+		border-color: var(--border-hi);
+	}
+	.btn-row {
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		margin-top: 16px;
+		flex-wrap: wrap;
 	}
 
 	main {
