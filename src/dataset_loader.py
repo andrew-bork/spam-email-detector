@@ -41,11 +41,18 @@ class PandasColumnDataset:
         return sample
 
 
+from gensim.models import Word2Vec
+from gensim.utils import simple_preprocess
+import numpy as np
+
+import regex
+
 class KaggleSpamDataset(Dataset):
     def __init__(self, filepath: str, transform=None):
         self.transform = transform
         
         self.data = pd.read_csv(filepath)
+        self.data["task_index"] = self.data["target"]
 
     def __len__(self):
         return len(self.data)
@@ -54,7 +61,7 @@ class KaggleSpamDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
             
-        sample = (self.data.iloc[idx, 0], self.data.iloc[idx, 1])
+        sample = (self.data["text"][idx], self.data["task_index"][idx])
 
         if self.transform:
             sample = self.transform.forward(sample)
@@ -69,7 +76,7 @@ class EmbeddingDataset(Dataset):
             transform(x)
             for x in tqdm(self.dataset.data["text"])
         ]
-        self.data["target"] = self.dataset.data["target"]
+        self.data["task_index"] = self.dataset.data["task_index"]
 
     def __len__(self):
         return len(self.dataset)
@@ -109,6 +116,58 @@ class ToTensor(torch.nn.Module):
         texts, labels = sample
         return torch.as_tensor(texts), torch.as_tensor(labels)
     
+
+def tokenize(s: str):
+    return regex.split("\\w+", s.lower())
+
+class Word2VecDataset(Dataset):
+    def __init__(self, dataset: Dataset, model: Word2Vec | None = None):
+        self.dataset = dataset
+        
+        corpus = [tokenize(t) for t in self.dataset.data["text"]]
+
+        if(model is None):
+            self.model = Word2Vec(
+                    sentences=corpus,
+                    vector_size=128,
+                    window=5,
+                    min_count=1,
+                    workers=4,
+                    epochs=20,
+                    sg=1
+                )
+        else:
+            self.model = model
+            self.model.wv = model
+
+        self.data = pd.DataFrame()
+        self.data["embedding"] = [
+            self._embed(x)
+            for x in tqdm(self.dataset.data["text"])
+        ]
+        self.data["task_index"] = self.dataset.data["task_index"]
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        sample = (self.data.iloc[idx, 0], self.data.iloc[idx, 1])
+        return sample
+
+    def _embed(self, x: str):
+        tokens = tokenize(x)
+        vecs = [self.model.wv[t] for t in tokens if t in self.model.wv]
+        
+        if not vecs:
+            return torch.zeros(300)
+
+        mat = np.vstack(vecs)
+        return torch.as_tensor(mat.mean(axis=0).astype(np.float32))
+
+        
+        
     
 
 if __name__ == "__main__":

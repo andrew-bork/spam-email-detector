@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpamLab — Training & Inference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Tokens ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d0d0f;
+  --bg2: #141417;
+  --bg3: #1c1c21;
+  --bg4: #242429;
+  --border: rgba(255,255,255,0.07);
+  --border-hi: rgba(255,255,255,0.14);
+  --text: #e8e8ec;
+  --text2: #9494a0;
+  --text3: #5c5c68;
+  --accent: #6c63ff;
+  --accent2: #8b84ff;
+  --accent-bg: rgba(108,99,255,0.12);
+  --accent-border: rgba(108,99,255,0.35);
+  --green: #3ecf7a;
+  --green-bg: rgba(62,207,122,0.1);
+  --green-border: rgba(62,207,122,0.3);
+  --red: #f56565;
+  --red-bg: rgba(245,101,101,0.1);
+  --red-border: rgba(245,101,101,0.3);
+  --amber: #f6ad55;
+  --amber-bg: rgba(246,173,85,0.1);
+  --amber-border: rgba(246,173,85,0.3);
+  --teal: #38bdf8;
+  --teal-bg: rgba(56,189,248,0.1);
+  --teal-border: rgba(56,189,248,0.3);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font-sans: 'Syne', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 14px; line-height: 1.6; }
+
+/* ── Layout ── */
+.app { display: grid; grid-template-rows: 56px 1fr; grid-template-columns: 220px 1fr; height: 100vh; overflow: hidden; }
+
+/* ── Header ── */
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+.logo-mark { width: 28px; height: 28px; background: var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+.logo-mark svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; }
+.header-tabs { display: flex; gap: 2px; margin-left: 32px; background: var(--bg3); border-radius: var(--radius); padding: 3px; }
+.tab-btn { padding: 5px 16px; border-radius: 6px; border: none; background: transparent; color: var(--text2); font-family: var(--font-sans); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.tab-btn.active { background: var(--bg4); color: var(--text); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+.header-status { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text3); }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); }
+.status-dot.running { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-bg); animation: pulse 1.5s infinite; }
+.status-dot.done { background: var(--green); }
+.status-dot.error { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── Sidebar ── */
+aside { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.nav-section { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); padding: 12px 8px 6px; }
+.nav-section:first-child { padding-top: 4px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--radius); cursor: pointer; color: var(--text2); font-size: 13px; font-weight: 500; transition: background 0.12s, color 0.12s; border: none; background: transparent; width: 100%; text-align: left; font-family: var(--font-sans); }
+.nav-item:hover { background: var(--bg3); color: var(--text); }
+.nav-item.active { background: var(--accent-bg); color: var(--accent2); }
+.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.7; }
+.nav-item.active svg { opacity: 1; }
+
+/* ── Main ── */
+main { overflow-y: auto; background: var(--bg); }
+.page { display: none; padding: 28px 32px; max-width: 1000px; }
+.page.active { display: block; }
+
+/* ── Section headings ── */
+.page-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+.page-sub { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+
+/* ── Cards ── */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 22px; margin-bottom: 16px; }
+.card-title { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); margin-bottom: 14px; }
+
+/* ── Form elements ── */
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field.full { grid-column: 1 / -1; }
+label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text3); }
+input[type=text], input[type=number], select {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-family: var(--font-mono); font-size: 13px;
+  padding: 8px 11px; outline: none; width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus { border-color: var(--accent-border); background: var(--bg4); }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239494a0' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; cursor: pointer; }
+input[type=range] { -webkit-appearance: none; appearance: none; background: var(--bg3); height: 4px; border-radius: 2px; border: none; padding: 0; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--bg); }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row input[type=range] { flex: 1; }
+.range-val { font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 40px; text-align: right; }
+textarea { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font-mono); font-size: 13px; padding: 10px 12px; outline: none; width: 100%; resize: vertical; min-height: 100px; transition: border-color 0.15s; line-height: 1.6; }
+textarea:focus { border-color: var(--accent-border); }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: var(--radius); border: none; font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg4); border-color: var(--border-hi); }
+.btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.btn-danger:hover { background: rgba(245,101,101,0.2); }
+.btn-run-all { background: linear-gradient(135deg, #6c63ff, #38bdf8); color: #fff; }
+.btn-run-all:hover { opacity: 0.9; }
+.btn-run-all:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-row { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+
+/* ── Progress & metrics ── */
+.epoch-bar-wrap { margin-bottom: 16px; }
+.epoch-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.progress-track { background: var(--bg3); border-radius: 3px; height: 6px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.metric-card { background: var(--bg3); border-radius: var(--radius); padding: 12px 14px; }
+.metric-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
+.metric-value { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--text); }
+.metric-value.good { color: var(--green); }
+.metric-value.bad { color: var(--red); }
+
+/* ── Loss chart ── */
+#loss-canvas-wrap { position: relative; height: 220px; margin-top: 8px; }
+canvas#loss-chart { width: 100%; height: 100%; }
+
+/* ── Log ── */
+.log-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font-mono); font-size: 11.5px; color: var(--text2); padding: 12px 14px; max-height: 200px; overflow-y: auto; line-height: 1.8; }
+.log-box .log-line { white-space: pre-wrap; word-break: break-all; }
+.log-box .log-line.err { color: var(--red); }
+.log-box .log-line.ok { color: var(--green); }
+.log-box .log-line.info { color: var(--amber); }
+
+/* ── Inference ── */
+.model-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px; }
+.mpick { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; transition: all 0.15s; text-align: left; width: 100%; font-family: var(--font-sans); }
+.mpick:hover { border-color: var(--border-hi); background: var(--bg4); }
+.mpick.selected { border-color: var(--accent-border); background: var(--accent-bg); }
+.mpick-icon { font-size: 20px; margin-bottom: 6px; }
+.mpick-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.mpick.selected .mpick-name { color: var(--accent2); }
+.mpick-tag { font-size: 10px; color: var(--text3); letter-spacing: 0.04em; }
+.mpick.selected .mpick-tag { color: var(--accent); }
+.example-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.ex-pill { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all 0.12s; }
+.ex-pill:hover { border-color: var(--border-hi); color: var(--text); background: var(--bg4); }
+
+/* ── Single result ── */
+.infer-result { border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--bg2); padding: 20px 22px; margin-top: 16px; animation: fadeUp 0.2s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.verdict { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.verdict-pill { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border-radius: 30px; font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.verdict-pill.spam { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.verdict-pill.ham { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.verdict-meta { font-size: 12px; color: var(--text2); }
+.conf-bars { display: flex; flex-direction: column; gap: 10px; }
+.conf-row { display: flex; align-items: center; gap: 12px; }
+.conf-label { font-family: var(--font-mono); font-size: 11px; color: var(--text2); min-width: 38px; }
+.conf-track { flex: 1; background: var(--bg3); border-radius: 3px; height: 8px; overflow: hidden; }
+.conf-bar { height: 100%; border-radius: 3px; transition: width 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+.conf-bar.spam { background: var(--red); }
+.conf-bar.ham { background: var(--green); }
+.conf-pct { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--text); min-width: 38px; text-align: right; }
+.token-preview { font-family: var(--font-mono); font-size: 10.5px; color: var(--text3); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.infer-loading { display: flex; align-items: center; gap: 10px; padding: 16px; color: var(--text2); font-size: 13px; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border-hi); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── All-classifiers panel ── */
+.all-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.model-result-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  animation: fadeUp 0.2s ease;
+}
+.model-result-card.is-spam { border-color: var(--red-border); }
+.model-result-card.is-ham  { border-color: var(--green-border); }
+.model-result-card.is-error { border-color: var(--border); opacity: 0.6; }
+.model-result-card.is-loading { opacity: 0.5; }
+.mrc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.mrc-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.mrc-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; }
+.mrc-badge.spam { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.mrc-badge.ham  { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.mrc-badge.missing { background: var(--bg4); color: var(--text3); border: 1px solid var(--border); }
+.mrc-bars { display: flex; flex-direction: column; gap: 6px; }
+.mrc-bar-row { display: flex; align-items: center; gap: 8px; }
+.mrc-bar-label { font-family: var(--font-mono); font-size: 10px; color: var(--text3); width: 32px; }
+.mrc-track { flex: 1; background: var(--bg4); border-radius: 2px; height: 5px; overflow: hidden; }
+.mrc-fill { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.34,1.56,0.64,1); }
+.mrc-fill.spam { background: var(--red); }
+.mrc-fill.ham  { background: var(--green); }
+.mrc-pct { font-family: var(--font-mono); font-size: 10px; color: var(--text2); min-width: 30px; text-align: right; }
+.mrc-error { font-family: var(--font-mono); font-size: 10px; color: var(--text3); margin-top: 6px; word-break: break-all; }
+.mrc-tag { font-size: 10px; color: var(--text3); margin-top: 6px; }
+
+/* ── Verdict summary bar ── */
+.verdict-summary {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  background: var(--bg3); border-radius: var(--radius);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.vs-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text3); }
+.vs-counts { display: flex; gap: 12px; flex: 1; }
+.vs-count { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 14px; font-weight: 500; }
+.vs-count .dot { width: 8px; height: 8px; border-radius: 50%; }
+.vs-count .dot.spam { background: var(--red); }
+.vs-count .dot.ham  { background: var(--green); }
+.vs-count .dot.miss { background: var(--text3); }
+.vs-majority { font-size: 13px; font-weight: 700; padding: 5px 14px; border-radius: 20px; }
+.vs-majority.spam { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.vs-majority.ham  { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.vs-majority.tie  { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+
+/* ── Embedding visualizer ── */
+.emb-section { margin-top: 0; }
+.emb-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+.emb-title { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); }
+.emb-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+.emb-heatmap {
+  display: flex; flex-wrap: wrap; gap: 2px;
+  margin-bottom: 10px;
+  cursor: default;
+}
+.emb-cell {
+  width: 12px; height: 12px; border-radius: 2px;
+  flex-shrink: 0;
+  position: relative;
+}
+.emb-cell:hover::after {
+  content: attr(data-val);
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--bg4); border: 1px solid var(--border-hi);
+  color: var(--text); font-family: var(--font-mono); font-size: 10px;
+  padding: 3px 6px; border-radius: 4px; white-space: nowrap; z-index: 10;
+  pointer-events: none;
+}
+.emb-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
+.emb-stat { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+.emb-stat span { color: var(--text2); }
+
+/* Word2Vec token coverage ── */
+.wv-tokens { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.wv-token { font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 4px; border: 1px solid; }
+.wv-token.in-vocab  { background: rgba(62,207,122,0.08); color: var(--green); border-color: var(--green-border); }
+.wv-token.oov       { background: var(--bg4); color: var(--text3); border-color: var(--border); }
+.wv-unavail { font-family: var(--font-mono); font-size: 11px; color: var(--text3); padding: 8px 0; }
+
+/* ── Checkpoint panel ── */
+.ckpt-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg3); border-radius: var(--radius); margin-bottom: 8px; }
+.ckpt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text); flex: 1; }
+.ckpt-badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.ckpt-badge.loaded { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.ckpt-badge.missing { background: var(--bg4); color: var(--text3); border: 1px solid var(--border); }
+
+/* ── Epoch table ── */
+.epoch-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.epoch-table th { text-align: left; padding: 5px 10px; color: var(--text3); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.epoch-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); color: var(--text2); }
+.epoch-table tr:last-child td { border-bottom: none; }
+.epoch-table tr:hover td { background: var(--bg3); color: var(--text); }
+
+/* ── Section divider ── */
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ── Toast ── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg4); border: 1px solid var(--border-hi); color: var(--text); padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; z-index: 999; animation: toastIn 0.2s ease; display: none; }
+.toast.show { display: block; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16"><polyline points="1,12 5,5 9,9 13,3"/></svg>
+    </div>
+    SpamLab
+  </div>
+  <div class="header-tabs">
+    <button class="tab-btn active" onclick="switchTab('train')">Train</button>
+    <button class="tab-btn" onclick="switchTab('infer')">Inference</button>
+    <button class="tab-btn" onclick="switchTab('checkpoints')">Checkpoints</button>
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="global-dot"></div>
+    <span id="global-status-text">Idle</span>
+  </div>
+</header>
+
+<!-- ── Sidebar ── -->
+<aside>
+  <div class="nav-section">Training</div>
+  <button class="nav-item active" id="nav-config" onclick="showPage('config')">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2"/><path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.9 3.9l.7.7M11.4 11.4l.7.7M11.4 4.6l-.7.7M4.6 11.4l-.7.7"/></svg>
+    Config
+  </button>
+  <button class="nav-item" id="nav-progress" onclick="showPage('progress')">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="10" width="3" height="4"/><rect x="6.5" y="6" width="3" height="8"/><rect x="11" y="2" width="3" height="12"/></svg>
+    Progress
+  </button>
+  <button class="nav-item" id="nav-log" onclick="showPage('log')">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h8M3 12h6"/></svg>
+    Log
+  </button>
+
+  <div class="nav-section">Inference</div>
+  <button class="nav-item" id="nav-infer" onclick="showPage('infer')">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3,2 13,8 3,14"/></svg>
+    Run Inference
+  </button>
+
+  <div class="nav-section">Storage</div>
+  <button class="nav-item" id="nav-checkpoints" onclick="showPage('checkpoints')">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 3v4h6V3"/></svg>
+    Checkpoints
+  </button>
+</aside>
+
+<!-- ── Main Content ── -->
+<main>
+
+  <!-- ═══ CONFIG PAGE ═══ -->
+  <section class="page active" id="page-config">
+    <div class="page-title">Training Config</div>
+    <div class="page-sub">Configure hyperparameters, then click Start Training.</div>
+
+    <div class="card">
+      <div class="card-title">Data</div>
+      <div class="field-row">
+        <div class="field full">
+          <label>Dataset CSV path</label>
+          <input type="text" id="data_path" value="./data/emails.csv" placeholder="./data/emails.csv">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Tokenizer</label>
+          <select id="tokenizer">
+            <option value="bert-base-cased">bert-base-cased</option>
+            <option value="bert-base-uncased">bert-base-uncased</option>
+            <option value="distilbert-base-uncased">distilbert-base-uncased</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Vocab size</label>
+          <input type="number" id="vocab_size" value="30522">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Train split</label>
+          <div class="range-row">
+            <input type="range" id="train_split" min="0.5" max="0.95" step="0.05" value="0.8" oninput="syncRange('train_split')">
+            <span class="range-val" id="train_split-val">0.80</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Max sequence length</label>
+          <input type="number" id="max_seq_len" value="256">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Model Architecture</div>
+      <div class="field-row three">
+        <div class="field">
+          <label>Embedding dim</label>
+          <input type="number" id="embedding_dim" value="128">
+        </div>
+        <div class="field">
+          <label>Hidden size</label>
+          <input type="number" id="hidden_size" value="256">
+        </div>
+        <div class="field">
+          <label>LSTM layers</label>
+          <input type="number" id="num_layers" value="2" min="1" max="8">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Output classes</label>
+          <input type="number" id="output_size" value="2">
+        </div>
+        <div class="field">
+          <label>Dropout</label>
+          <div class="range-row">
+            <input type="range" id="dropout" min="0" max="0.7" step="0.05" value="0.3" oninput="syncRange('dropout')">
+            <span class="range-val" id="dropout-val">0.30</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Optimization</div>
+      <div class="field-row three">
+        <div class="field">
+          <label>Epochs</label>
+          <input type="number" id="epochs" value="20" min="1">
+        </div>
+        <div class="field">
+          <label>Batch size</label>
+          <input type="number" id="batch_size" value="32">
+        </div>
+        <div class="field">
+          <label>Learning rate</label>
+          <input type="text" id="lr" value="1e-4">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Weight decay</label>
+          <input type="text" id="weight_decay" value="1e-5">
+        </div>
+        <div class="field"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="start-btn" onclick="startTraining()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="white"><polygon points="3,2 13,8 3,14"/></svg>
+        Start Training
+      </button>
+      <button class="btn btn-danger" id="stop-btn" onclick="stopTraining()" disabled>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
+        Stop
+      </button>
+      <button class="btn btn-secondary" onclick="resetDefaults()">Reset defaults</button>
+    </div>
+  </section>
+
+  <!-- ═══ PROGRESS PAGE ═══ -->
+  <section class="page" id="page-progress">
+    <div class="page-title">Training Progress</div>
+    <div class="page-sub">Live epoch metrics and loss curves.</div>
+
+    <div class="card">
+      <div class="card-title">Epoch progress</div>
+      <div class="epoch-bar-wrap">
+        <div class="epoch-labels">
+          <span id="epoch-label">Epoch 0 / 0</span>
+          <span id="epoch-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="epoch-bar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="metrics-grid" id="live-metrics">
+        <div class="metric-card"><div class="metric-label">Train loss</div><div class="metric-value" id="m-tloss">—</div></div>
+        <div class="metric-card"><div class="metric-label">Val loss</div><div class="metric-value" id="m-vloss">—</div></div>
+        <div class="metric-card"><div class="metric-label">Val acc</div><div class="metric-value" id="m-vacc">—</div></div>
+        <div class="metric-card"><div class="metric-label">Status</div><div class="metric-value" id="m-status">Idle</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Loss curves</div>
+      <div id="loss-canvas-wrap">
+        <canvas id="loss-chart"></canvas>
+      </div>
+      <div style="display:flex; gap: 16px; margin-top: 10px;">
+        <span style="font-size:11px; color:var(--accent2);">— Train loss</span>
+        <span style="font-size:11px; color:var(--amber);">— Val loss</span>
+      </div>
+    </div>
+
+    <div class="card" id="final-metrics-card" style="display:none">
+      <div class="card-title">Final metrics</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;" id="final-metrics-grid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Epoch history</div>
+      <div style="overflow-x:auto;">
+        <table class="epoch-table">
+          <thead><tr><th>Epoch</th><th>Train loss</th><th>Val loss</th><th>Val acc</th></tr></thead>
+          <tbody id="epoch-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ LOG PAGE ═══ -->
+  <section class="page" id="page-log">
+    <div class="page-title">Training Log</div>
+    <div class="page-sub">Real-time server events.</div>
+    <div class="card">
+      <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px;">
+        <div class="card-title" style="margin:0">Event stream</div>
+        <button class="btn btn-secondary btn-sm" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-box" id="log-box">
+        <div class="log-line info">Waiting for training to start…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ INFERENCE PAGE ═══ -->
+  <section class="page" id="page-infer">
+    <div class="page-title">Run Inference</div>
+    <div class="page-sub">Classify text with all models at once, or pick a specific one.</div>
+
+    <!-- Input card -->
+    <div class="card">
+      <div class="card-title">Input</div>
+      <div class="card-title" style="margin-bottom:8px; font-size:10px;">Try an example</div>
+      <div class="example-strip">
+        <span class="ex-pill" onclick="loadExample(this)">Congratulations! You've won a $1,000 gift card. Click here NOW to claim your prize.</span>
+        <span class="ex-pill" onclick="loadExample(this)">Hi, are we still on for the 3pm sync tomorrow?</span>
+        <span class="ex-pill" onclick="loadExample(this)">URGENT: Your account has been compromised. Verify your details immediately to avoid suspension.</span>
+        <span class="ex-pill" onclick="loadExample(this)">Can you review the pull request I submitted earlier? No rush at all.</span>
+        <span class="ex-pill" onclick="loadExample(this)">Free entry in 2 a wkly comp to win FA Cup tickets! Txt FA to 87121</span>
+        <span class="ex-pill" onclick="loadExample(this)">The quarterly report is attached. Let me know if you have questions.</span>
+        <span class="ex-pill" onclick="loadExample(this)">You have been selected for an EXCLUSIVE offer. Act now before it expires!</span>
+      </div>
+
+      <div style="position: relative;">
+        <textarea id="infer-text" placeholder="Paste or type a message to classify…" oninput="onInferInput()" rows="4"></textarea>
+        <span id="infer-charcount" style="position:absolute; bottom:10px; right:12px; font-size:10px; font-family:var(--font-mono); color:var(--text3); pointer-events:none;">0</span>
+      </div>
+      <div id="token-hint" class="token-preview" style="margin-top:6px;"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-run-all" id="run-all-btn" onclick="runAllInference()" disabled>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="white"><path d="M2 4h12M2 8h12M2 12h12" stroke="white" stroke-width="1.5" fill="none"/></svg>
+          Run All Classifiers
+        </button>
+        <button class="btn btn-primary" id="infer-btn" onclick="runSingleInference()" disabled>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="white"><polygon points="3,2 13,8 3,14"/></svg>
+          Run Selected
+        </button>
+        <button class="btn btn-secondary" onclick="clearInfer()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Model selector (for single inference) -->
+    <div class="card">
+      <div class="card-title">Select Model (for Run Selected)</div>
+      <div class="model-picker">
+        <button class="mpick selected" data-model="lstm" onclick="pickModel(this)">
+          <div class="mpick-icon">⚡</div>
+          <div class="mpick-name">LSTM</div>
+          <div class="mpick-tag">Token · PT</div>
+        </button>
+        <button class="mpick" data-model="rnn" onclick="pickModel(this)">
+          <div class="mpick-icon">🔁</div>
+          <div class="mpick-name">RNN</div>
+          <div class="mpick-tag">Token · PT</div>
+        </button>
+        <button class="mpick" data-model="nn" onclick="pickModel(this)">
+          <div class="mpick-icon">🧠</div>
+          <div class="mpick-name">Neural Net</div>
+          <div class="mpick-tag">Embed · MiniLM</div>
+        </button>
+        <button class="mpick" data-model="svm" onclick="pickModel(this)">
+          <div class="mpick-icon">📐</div>
+          <div class="mpick-name">SVM</div>
+          <div class="mpick-tag">Embed · sklearn</div>
+        </button>
+        <button class="mpick" data-model="knn_cos" onclick="pickModel(this)">
+          <div class="mpick-icon">📍</div>
+          <div class="mpick-name">k-NN (cos)</div>
+          <div class="mpick-tag">Embed · sklearn</div>
+        </button>
+        <button class="mpick" data-model="knn_euc" onclick="pickModel(this)">
+          <div class="mpick-icon">📏</div>
+          <div class="mpick-name">k-NN (euc)</div>
+          <div class="mpick-tag">Embed · sklearn</div>
+        </button>
+        <button class="mpick" data-model="nb" onclick="pickModel(this)">
+          <div class="mpick-icon">📊</div>
+          <div class="mpick-name">Naive Bayes</div>
+          <div class="mpick-tag">Embed · sklearn</div>
+        </button>
+      </div>
+      <div id="model-desc" style="font-size: 12px; color: var(--text2); padding: 10px 12px; background: var(--bg3); border-radius: var(--radius);">
+        Bidirectional 2-layer LSTM with learned token embeddings. Requires <code style="font-family:var(--font-mono); font-size:11px;">outputs/lstm_model.pt</code>.
+      </div>
+    </div>
+
+    <!-- Results area -->
+    <div id="infer-result-area"></div>
+
+  </section>
+
+  <!-- ═══ CHECKPOINTS PAGE ═══ -->
+  <section class="page" id="page-checkpoints">
+    <div class="page-title">Checkpoints</div>
+    <div class="page-sub">Saved model files in <code style="font-family:var(--font-mono); font-size:12px;">outputs/</code>.</div>
+
+    <div class="card">
+      <div class="card-title">Available checkpoints</div>
+      <div id="ckpt-list">
+        <div style="color: var(--text3); font-size: 13px;">Checking server…</div>
+      </div>
+      <div class="btn-row" style="margin-top: 14px;">
+        <button class="btn btn-secondary" onclick="loadCheckpoints()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Training session</div>
+      <div id="session-info" style="font-size:13px; color:var(--text2);">No session active.</div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let trainLosses = [], valLosses = [], epochRows = [];
+let sse = null;
+let selectedModel = "lstm";
+
+const MODEL_INFO = {
+  lstm:    "Bidirectional 2-layer LSTM with learned token embeddings. Requires outputs/lstm_model.pt.",
+  rnn:     "Single-direction RNN with token embeddings. Requires outputs/rnn_model.pt.",
+  nn:      "3-layer MLP (hidden=512) on MiniLM sentence embeddings.",
+  svm:     "SVM classifier on MiniLM sentence embeddings.",
+  knn_cos: "k-Nearest Neighbours with cosine distance on MiniLM embeddings.",
+  knn_euc: "k-Nearest Neighbours with euclidean distance on MiniLM embeddings.",
+  nb:      "Gaussian Naive Bayes on MiniLM sentence embeddings.",
+};
+
+const MODEL_DISPLAY = {
+  lstm:    { name: "LSTM",       icon: "⚡", tag: "Token / BERT" },
+  rnn:     { name: "RNN",        icon: "🔁", tag: "Token / BERT" },
+  nn:      { name: "Neural Net", icon: "🧠", tag: "MiniLM embed" },
+  svm:     { name: "SVM",        icon: "📐", tag: "MiniLM embed" },
+  knn_cos: { name: "k-NN (cos)", icon: "📍", tag: "MiniLM embed" },
+  knn_euc: { name: "k-NN (euc)", icon: "📏", tag: "MiniLM embed" },
+  nb:      { name: "Naive Bayes",icon: "📊", tag: "MiniLM embed" },
+};
+
+// ── Navigation ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['train','infer','checkpoints'][i] === tab));
+  if (tab === 'train') showPage('config');
+  if (tab === 'infer') showPage('infer');
+  if (tab === 'checkpoints') showPage('checkpoints');
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  if (name === 'checkpoints') loadCheckpoints();
+}
+
+// ── Range sliders ──
+function syncRange(id) {
+  const el = document.getElementById(id);
+  document.getElementById(id + '-val').textContent = parseFloat(el.value).toFixed(2);
+}
+
+// ── Config helpers ──
+function getConfig() {
+  return {
+    data_path:    document.getElementById('data_path').value,
+    tokenizer:    document.getElementById('tokenizer').value,
+    vocab_size:   parseInt(document.getElementById('vocab_size').value),
+    train_split:  parseFloat(document.getElementById('train_split').value),
+    max_seq_len:  parseInt(document.getElementById('max_seq_len').value),
+    embedding_dim: parseInt(document.getElementById('embedding_dim').value),
+    hidden_size:  parseInt(document.getElementById('hidden_size').value),
+    num_layers:   parseInt(document.getElementById('num_layers').value),
+    output_size:  parseInt(document.getElementById('output_size').value),
+    dropout:      parseFloat(document.getElementById('dropout').value),
+    epochs:       parseInt(document.getElementById('epochs').value),
+    batch_size:   parseInt(document.getElementById('batch_size').value),
+    lr:           parseFloat(document.getElementById('lr').value),
+    weight_decay: parseFloat(document.getElementById('weight_decay').value),
+  };
+}
+
+function resetDefaults() {
+  document.getElementById('data_path').value = './data/emails.csv';
+  document.getElementById('tokenizer').value = 'bert-base-cased';
+  document.getElementById('vocab_size').value = 30522;
+  document.getElementById('train_split').value = 0.8; syncRange('train_split');
+  document.getElementById('max_seq_len').value = 256;
+  document.getElementById('embedding_dim').value = 128;
+  document.getElementById('hidden_size').value = 256;
+  document.getElementById('num_layers').value = 2;
+  document.getElementById('output_size').value = 2;
+  document.getElementById('dropout').value = 0.3; syncRange('dropout');
+  document.getElementById('epochs').value = 20;
+  document.getElementById('batch_size').value = 32;
+  document.getElementById('lr').value = '1e-4';
+  document.getElementById('weight_decay').value = '1e-5';
+}
+
+// ── Training ──
+async function startTraining() {
+  const cfg = getConfig();
+  trainLosses = []; valLosses = []; epochRows = [];
+  document.getElementById('epoch-table-body').innerHTML = '';
+  document.getElementById('final-metrics-card').style.display = 'none';
+  setGlobalStatus('running', 'Running');
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('stop-btn').disabled = false;
+  showPage('progress');
+
+  try {
+    const r = await fetch('/api/train', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
+    if (!r.ok) { const d = await r.json(); toast(d.error || 'Server error'); return; }
+    startSSE();
+    toast('Training started');
+  } catch(e) {
+    toast('Cannot reach server — is server.py running?', 6000);
+    setGlobalStatus('', 'Idle');
+    document.getElementById('start-btn').disabled = false;
+    document.getElementById('stop-btn').disabled = true;
+  }
+}
+
+async function stopTraining() {
+  await fetch('/api/stop', { method: 'POST' }).catch(() => {});
+  toast('Stop requested');
+}
+
+function startSSE() {
+  if (sse) sse.close();
+  sse = new EventSource('/api/stream');
+
+  sse.addEventListener('epoch', e => {
+    const d = JSON.parse(e.data);
+    const total = d.total || parseInt(document.getElementById('epochs').value);
+    const pct = Math.round((d.epoch / total) * 100);
+    document.getElementById('epoch-label').textContent = `Epoch ${d.epoch} / ${total}`;
+    document.getElementById('epoch-pct').textContent = pct + '%';
+    document.getElementById('epoch-bar').style.width = pct + '%';
+    document.getElementById('m-tloss').textContent = d.train_loss.toFixed(4);
+    document.getElementById('m-vloss').textContent = d.val_loss.toFixed(4);
+    document.getElementById('m-vacc').textContent = d.val_acc.toFixed(1) + '%';
+    trainLosses.push(d.train_loss);
+    valLosses.push(d.val_loss);
+    epochRows.push(d);
+    renderLossChart();
+    addEpochRow(d);
+  });
+
+  sse.addEventListener('status', e => {
+    const d = JSON.parse(e.data);
+    const s = d.status;
+    setGlobalStatus(s, s.charAt(0).toUpperCase() + s.slice(1));
+    document.getElementById('m-status').textContent = s;
+    appendLog(d.msg, s === 'error' ? 'err' : s === 'done' ? 'ok' : 'info');
+    if (s === 'done' || s === 'error' || s === 'stopped') {
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('stop-btn').disabled = true;
+    }
+  });
+
+  sse.addEventListener('log', e => {
+    const d = JSON.parse(e.data);
+    appendLog(d.msg);
+  });
+
+  sse.addEventListener('metrics', e => {
+    const d = JSON.parse(e.data);
+    renderFinalMetrics(d);
+  });
+
+  sse.onerror = () => {};
+}
+
+// ── Log ──
+function appendLog(msg, cls = '') {
+  const box = document.getElementById('log-box');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (cls ? ' ' + cls : '');
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+function clearLog() { document.getElementById('log-box').innerHTML = ''; }
+
+// ── Epoch table ──
+function addEpochRow(d) {
+  const tb = document.getElementById('epoch-table-body');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${d.epoch}</td><td>${d.train_loss.toFixed(4)}</td><td>${d.val_loss.toFixed(4)}</td><td>${d.val_acc.toFixed(1)}%</td>`;
+  tb.appendChild(tr);
+}
+
+// ── Final metrics ──
+function renderFinalMetrics(d) {
+  const card = document.getElementById('final-metrics-card');
+  const grid = document.getElementById('final-metrics-grid');
+  card.style.display = 'block';
+
+  const sections = [{label: 'Train', data: d.train}, {label: 'Val', data: d.val}];
+  grid.innerHTML = sections.map(s => `
+    <div>
+      <div style="font-size:11px; font-weight:600; color:var(--text3); margin-bottom:8px; letter-spacing:0.06em; text-transform:uppercase;">${s.label}</div>
+      <div class="metrics-grid">
+        ${Object.entries(s.data).map(([k,v]) => `
+          <div class="metric-card">
+            <div class="metric-label">${k.replace(/_/g,' ')}</div>
+            <div class="metric-value ${k.includes('accuracy') || k.includes('f1') ? (v > 0.8 ? 'good' : v < 0.5 ? 'bad' : '') : ''}">${typeof v === 'number' ? (v < 2 ? v.toFixed(4) : v.toFixed(2)) : v}</div>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+// ── Loss chart ──
+function renderLossChart() {
+  const canvas = document.getElementById('loss-chart');
+  const wrap = document.getElementById('loss-canvas-wrap');
+  canvas.width = wrap.clientWidth * devicePixelRatio;
+  canvas.height = wrap.clientHeight * devicePixelRatio;
+  canvas.style.width = wrap.clientWidth + 'px';
+  canvas.style.height = wrap.clientHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const pad = {top: 16, right: 16, bottom: 32, left: 48};
+  const cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (trainLosses.length < 2) {
+    ctx.fillStyle = '#5c5c68';
+    ctx.font = '12px IBM Plex Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText('Loss data will appear here during training', W/2, H/2);
+    return;
+  }
+
+  const allVals = [...trainLosses, ...valLosses];
+  const minY = Math.min(...allVals) * 0.9, maxY = Math.max(...allVals) * 1.05;
+  const n = trainLosses.length;
+
+  function toX(i) { return pad.left + (i / (n-1)) * cW; }
+  function toY(v) { return pad.top + (1 - (v - minY) / (maxY - minY)) * cH; }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (i/4) * cH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    const val = maxY - (i/4) * (maxY - minY);
+    ctx.fillStyle = '#5c5c68'; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillText(val.toFixed(3), pad.left - 6, y + 3);
+  }
+
+  ctx.textAlign = 'center'; ctx.fillStyle = '#5c5c68'; ctx.font = '10px IBM Plex Mono';
+  const step = Math.max(1, Math.floor(n / 5));
+  for (let i = 0; i < n; i += step) {
+    ctx.fillText(i + 1, toX(i), H - 8);
+  }
+
+  function drawLine(data, color) {
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    data.forEach((v, i) => i === 0 ? ctx.moveTo(toX(i), toY(v)) : ctx.lineTo(toX(i), toY(v)));
+    ctx.stroke();
+    const last = data.length - 1;
+    ctx.beginPath(); ctx.arc(toX(last), toY(data[last]), 4, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  }
+
+  drawLine(trainLosses, '#6c63ff');
+  drawLine(valLosses, '#f6ad55');
+}
+
+// ── Global status ──
+function setGlobalStatus(cls, text) {
+  const dot = document.getElementById('global-dot');
+  dot.className = 'status-dot' + (cls ? ' ' + cls : '');
+  document.getElementById('global-status-text').textContent = text;
+}
+
+// ── Inference ──
+function pickModel(el) {
+  document.querySelectorAll('.mpick').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedModel = el.dataset.model;
+  document.getElementById('model-desc').textContent = MODEL_INFO[selectedModel] || '';
+  updateTokenHint();
+}
+
+function loadExample(el) {
+  document.getElementById('infer-text').value = el.textContent.trim();
+  onInferInput();
+}
+
+function onInferInput() {
+  const txt = document.getElementById('infer-text').value;
+  document.getElementById('infer-charcount').textContent = txt.length;
+  const hasText = txt.trim().length > 0;
+  document.getElementById('infer-btn').disabled = !hasText;
+  document.getElementById('run-all-btn').disabled = !hasText;
+  updateTokenHint();
+}
+
+function updateTokenHint() {
+  const txt = document.getElementById('infer-text').value.trim();
+  const hint = document.getElementById('token-hint');
+  if (txt && (selectedModel === 'lstm' || selectedModel === 'rnn')) {
+    const tokens = (txt.match(/\b\w+\b/g) || []).slice(0, 24);
+    hint.textContent = 'Approx tokens: ' + tokens.map(t => '['+t+']').join(' ') + (tokens.length >= 24 ? ' …' : '');
+  } else {
+    hint.textContent = '';
+  }
+}
+
+function clearInfer() {
+  document.getElementById('infer-text').value = '';
+  document.getElementById('infer-charcount').textContent = '0';
+  document.getElementById('infer-btn').disabled = true;
+  document.getElementById('run-all-btn').disabled = true;
+  document.getElementById('infer-result-area').innerHTML = '';
+  document.getElementById('token-hint').textContent = '';
+}
+
+// ── Single inference ──
+async function runSingleInference() {
+  const text = document.getElementById('infer-text').value.trim();
+  if (!text) return;
+  document.getElementById('infer-btn').disabled = true;
+  document.getElementById('infer-result-area').innerHTML = `
+    <div class="infer-result">
+      <div class="infer-loading">
+        <div class="spinner"></div>
+        Running ${document.querySelector('.mpick.selected .mpick-name').textContent}…
+      </div>
+    </div>`;
+
+  try {
+    const r = await fetch('/api/infer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text, model: selectedModel })
+    });
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const d = await r.json();
+    renderSingleResult(d, false);
+  } catch(e) {
+    const sim = simulateResult(text);
+    renderSingleResult(sim, true);
+  } finally {
+    document.getElementById('infer-btn').disabled = false;
+  }
+}
+
+function simulateResult(text) {
+  const spamWords = ['win','won','free','click','claim','urgent','verify','prize','gift','cash','offer','congratulations','wkly','comp','txt','selected','exclusive','expires','suspended','compromised','act now'];
+  const lower = text.toLowerCase();
+  const hits = spamWords.filter(w => lower.includes(w)).length;
+  const excl = (text.match(/!/g)||[]).length;
+  const caps = text.replace(/[^A-Z]/g,'').length / Math.max(text.length, 1);
+  let sp = Math.min(0.97, Math.max(0.03, hits*0.14 + excl*0.05 + caps*0.3));
+  return { prediction: sp > 0.5 ? 1 : 0, confidences: [+(1-sp).toFixed(4), +sp.toFixed(4)], simulated: true };
+}
+
+function renderSingleResult(d, simulated) {
+  const isSpam = d.prediction === 1;
+  const label = isSpam ? 'spam' : 'ham';
+  const icon = isSpam ? '⚠' : '✓';
+  const spamPct = Math.round((d.confidences ? d.confidences[1] : (isSpam ? 0.87 : 0.08)) * 100);
+  const hamPct = 100 - spamPct;
+  const modelName = document.querySelector('.mpick.selected .mpick-name').textContent;
+
+  document.getElementById('infer-result-area').innerHTML = `
+    <div class="infer-result">
+      <div class="verdict">
+        <div class="verdict-pill ${label}">${icon} ${label.toUpperCase()}</div>
+        <div class="verdict-meta">
+          ${modelName}${simulated ? ' <span style="color:var(--amber)">(simulated — server offline)</span>' : ''}
+        </div>
+      </div>
+      <div class="conf-bars">
+        <div class="conf-row">
+          <span class="conf-label">Spam</span>
+          <div class="conf-track"><div class="conf-bar spam" style="width:0%" id="bar-spam"></div></div>
+          <span class="conf-pct">${spamPct}%</span>
+        </div>
+        <div class="conf-row">
+          <span class="conf-label">Ham</span>
+          <div class="conf-track"><div class="conf-bar ham" style="width:0%" id="bar-ham"></div></div>
+          <span class="conf-pct">${hamPct}%</span>
+        </div>
+      </div>
+      ${d.token_count ? `<div style="margin-top:12px; font-size:11px; color:var(--text3);">Token count: ${d.token_count} &nbsp;·&nbsp; Truncated: ${d.truncated ? 'yes' : 'no'}</div>` : ''}
+    </div>`;
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const bs = document.getElementById('bar-spam');
+    const bh = document.getElementById('bar-ham');
+    if (bs) bs.style.width = spamPct + '%';
+    if (bh) bh.style.width = hamPct + '%';
+  }));
+}
+
+// ── Run All Classifiers ──
+async function runAllInference() {
+  const text = document.getElementById('infer-text').value.trim();
+  if (!text) return;
+
+  document.getElementById('run-all-btn').disabled = true;
+  document.getElementById('infer-btn').disabled = true;
+
+  const allKeys = ['lstm','rnn','svm','knn_cos','knn_euc','nb','nn'];
+  const area = document.getElementById('infer-result-area');
+
+  // Show skeleton loading cards
+  area.innerHTML = `
+    <div class="card" id="all-results-wrap" style="animation: fadeUp 0.2s ease;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div class="card-title" style="margin:0">All Classifiers</div>
+        <div class="infer-loading" style="padding:0; gap:8px;">
+          <div class="spinner"></div>
+          <span style="font-size:12px; color:var(--text2);">Running…</span>
+        </div>
+      </div>
+      <div class="all-results-grid" id="all-model-cards">
+        ${allKeys.map(k => `
+          <div class="model-result-card is-loading" id="mrc-${k}">
+            <div class="mrc-header">
+              <div class="mrc-name">${MODEL_DISPLAY[k].icon} ${MODEL_DISPLAY[k].name}</div>
+              <div class="mrc-badge missing">…</div>
+            </div>
+            <div class="mrc-tag" style="color:var(--text3); font-size:10px;">${MODEL_DISPLAY[k].tag}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Embeddings section (loading) -->
+    <div class="card" id="embeddings-wrap" style="animation: fadeUp 0.2s ease; animation-delay:0.1s;">
+      <div class="card-title">Embedding Representations</div>
+      <div style="color:var(--text3); font-size:12px; display:flex; align-items:center; gap:8px;">
+        <div class="spinner"></div> Computing embeddings…
+      </div>
+    </div>`;
+
+  try {
+    const r = await fetch('/api/infer_all', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text })
+    });
+
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const data = await r.json();
+
+    // Update header — remove spinner
+    const wrap = document.getElementById('all-results-wrap');
+    wrap.querySelector('.infer-loading').remove();
+
+    // Render individual model cards
+    const results = data.results || {};
+    renderAllModelCards(results, allKeys);
+
+    // Verdict summary
+    const summaryHTML = buildVerdictSummary(results, allKeys);
+    wrap.querySelector('.card-title').insertAdjacentHTML('afterend', summaryHTML);
+
+    // Render embeddings
+    renderEmbeddings(data.embeddings || {}, document.getElementById('embeddings-wrap'));
+
+  } catch(e) {
+    // Fallback: simulate all results
+    const fakeResults = {};
+    allKeys.forEach(k => {
+      const sim = simulateResult(text);
+      fakeResults[k] = { ...sim, simulated: true };
+    });
+
+    const wrap = document.getElementById('all-results-wrap');
+    if (wrap) wrap.querySelector('.infer-loading').innerHTML =
+      '<span style="color:var(--amber); font-size:12px;">⚠ Server offline — showing simulated results</span>';
+
+    renderAllModelCards(fakeResults, allKeys);
+    const summaryHTML = buildVerdictSummary(fakeResults, allKeys);
+    wrap.querySelector('.card-title').insertAdjacentHTML('afterend', summaryHTML);
+
+    const embWrap = document.getElementById('embeddings-wrap');
+    if (embWrap) embWrap.innerHTML = `
+      <div class="card-title">Embedding Representations</div>
+      <div style="color:var(--amber); font-size:12px;">Server offline — embeddings unavailable.</div>`;
+  } finally {
+    document.getElementById('run-all-btn').disabled = false;
+    document.getElementById('infer-btn').disabled = false;
+  }
+}
+
+function renderAllModelCards(results, allKeys) {
+  allKeys.forEach(k => {
+    const card = document.getElementById('mrc-' + k);
+    if (!card) return;
+    card.classList.remove('is-loading');
+
+    const r = results[k];
+    if (!r || r.error) {
+      card.classList.add('is-error');
+      card.innerHTML = `
+        <div class="mrc-header">
+          <div class="mrc-name">${MODEL_DISPLAY[k].icon} ${MODEL_DISPLAY[k].name}</div>
+          <div class="mrc-badge missing">N/A</div>
+        </div>
+        <div class="mrc-tag">${MODEL_DISPLAY[k].tag}</div>
+        <div class="mrc-error">${r ? r.error : 'No result'}</div>`;
+      return;
+    }
+
+    const isSpam = r.prediction === 1;
+    card.classList.add(isSpam ? 'is-spam' : 'is-ham');
+    const conf = r.confidences || [0.5, 0.5];
+    const hamPct  = Math.round(conf[0] * 100);
+    const spamPct = Math.round(conf[1] * 100);
+    const uid = k + '_' + Date.now();
+
+    card.innerHTML = `
+      <div class="mrc-header">
+        <div class="mrc-name">${MODEL_DISPLAY[k].icon} ${MODEL_DISPLAY[k].name}</div>
+        <div class="mrc-badge ${isSpam ? 'spam' : 'ham'}">${isSpam ? '⚠ Spam' : '✓ Ham'}</div>
+      </div>
+      <div class="mrc-bars">
+        <div class="mrc-bar-row">
+          <span class="mrc-bar-label">Spam</span>
+          <div class="mrc-track"><div class="mrc-fill spam" id="mf-spam-${uid}" style="width:0%"></div></div>
+          <span class="mrc-pct">${spamPct}%</span>
+        </div>
+        <div class="mrc-bar-row">
+          <span class="mrc-bar-label">Ham</span>
+          <div class="mrc-track"><div class="mrc-fill ham" id="mf-ham-${uid}" style="width:0%"></div></div>
+          <span class="mrc-pct">${hamPct}%</span>
+        </div>
+      </div>
+      <div class="mrc-tag">${MODEL_DISPLAY[k].tag}${r.token_count ? ` · ${r.token_count} tokens` : ''}</div>`;
+
+    // Animate bars
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const fs = document.getElementById('mf-spam-' + uid);
+      const fh = document.getElementById('mf-ham-' + uid);
+      if (fs) fs.style.width = spamPct + '%';
+      if (fh) fh.style.width = hamPct + '%';
+    }));
+  });
+}
+
+function buildVerdictSummary(results, allKeys) {
+  let spamCount = 0, hamCount = 0, missCount = 0;
+  allKeys.forEach(k => {
+    const r = results[k];
+    if (!r || r.error) { missCount++; return; }
+    r.prediction === 1 ? spamCount++ : hamCount++;
+  });
+  const total = spamCount + hamCount;
+  const majorityLabel = spamCount > hamCount ? 'spam' : hamCount > spamCount ? 'ham' : 'tie';
+  const majorityText  = spamCount > hamCount ? '⚠ Majority: Spam' : hamCount > spamCount ? '✓ Majority: Ham' : '~ Tie';
+
+  return `<div class="verdict-summary">
+    <span class="vs-label">Verdict</span>
+    <div class="vs-counts">
+      <span class="vs-count"><span class="dot spam"></span>${spamCount} spam</span>
+      <span class="vs-count"><span class="dot ham"></span>${hamCount} ham</span>
+      ${missCount ? `<span class="vs-count"><span class="dot miss"></span>${missCount} N/A</span>` : ''}
+    </div>
+    <div class="vs-majority ${majorityLabel}">${majorityText}</div>
+  </div>`;
+}
+
+// ── Embedding visualiser ──
+function renderEmbeddings(embeddings, container) {
+  const st  = embeddings.sentence_transformer || {};
+  const wv  = embeddings.word2vec || {};
+
+  container.innerHTML = `<div class="card-title">Embedding Representations</div>
+    <div class="emb-section" id="emb-st-wrap"></div>
+    <hr class="section-divider">
+    <div class="emb-section" id="emb-wv-wrap"></div>`;
+
+  // ── Sentence Transformer ────────────────────────────────────────
+  const stWrap = container.querySelector('#emb-st-wrap');
+  if (st.error) {
+    stWrap.innerHTML = `<div class="emb-header"><div class="emb-title">Sentence Transformer</div></div>
+      <div class="wv-unavail">Error: ${st.error}</div>`;
+  } else if (st.vector) {
+    const vec = st.vector;
+    const minV = Math.min(...vec), maxV = Math.max(...vec);
+    const range = maxV - minV || 1;
+    const norm = v => (v - minV) / range; // 0..1
+
+    const cells = vec.map((v, i) => {
+      const n = norm(v);
+      const color = vecColor(n);
+      return `<div class="emb-cell" style="background:${color}" data-val="${v.toFixed(4)}" title="dim ${i}: ${v.toFixed(4)}"></div>`;
+    }).join('');
+
+    const mean = (vec.reduce((a,b)=>a+b,0)/vec.length).toFixed(4);
+    const std  = Math.sqrt(vec.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vec.length).toFixed(4);
+
+    stWrap.innerHTML = `
+      <div class="emb-header">
+        <div class="emb-title">Sentence Transformer <span style="font-weight:400; text-transform:none; letter-spacing:0">(${st.model})</span></div>
+        <div class="emb-meta">${vec.length} dims</div>
+      </div>
+      <div class="emb-heatmap">${cells}</div>
+      <div class="emb-stats">
+        <div class="emb-stat">min <span>${minV.toFixed(4)}</span></div>
+        <div class="emb-stat">max <span>${maxV.toFixed(4)}</span></div>
+        <div class="emb-stat">mean <span>${mean}</span></div>
+        <div class="emb-stat">std <span>${std}</span></div>
+      </div>
+      <div style="margin-top:10px; font-size:10px; color:var(--text3);">
+        Each cell = 1 dimension. Hover for value. Color: 
+        <span style="display:inline-block;width:10px;height:10px;background:#1a2a6c;border-radius:2px;vertical-align:middle;"></span> negative →
+        <span style="display:inline-block;width:10px;height:10px;background:#b21f1f;border-radius:2px;vertical-align:middle;margin-left:4px;"></span> zero →
+        <span style="display:inline-block;width:10px;height:10px;background:#fdbb2d;border-radius:2px;vertical-align:middle;margin-left:4px;"></span> positive
+      </div>`;
+  }
+
+  // ── Word2Vec ────────────────────────────────────────────────────
+  const wvWrap = container.querySelector('#emb-wv-wrap');
+  if (wv.error) {
+    wvWrap.innerHTML = `<div class="emb-header"><div class="emb-title">Word2Vec</div></div>
+      <div class="wv-unavail">Error: ${wv.error}</div>`;
+  } else if (!wv.available) {
+    wvWrap.innerHTML = `
+      <div class="emb-header"><div class="emb-title">Word2Vec</div></div>
+      <div class="wv-unavail">
+        No Word2Vec model found at <code style="font-family:var(--font-mono)">outputs/word2vec.model</code>.<br>
+        Train a Word2Vec model and save it there to see embeddings here.
+      </div>`;
+  } else {
+    const vec = wv.vector || [];
+    const minV = Math.min(...vec), maxV = Math.max(...vec);
+    const range = maxV - minV || 1;
+    const norm = v => (v - minV) / range;
+
+    const cells = vec.map((v, i) => {
+      const n = norm(v);
+      const color = vecColor(n);
+      return `<div class="emb-cell" style="background:${color}" data-val="${v.toFixed(4)}" title="dim ${i}: ${v.toFixed(4)}"></div>`;
+    }).join('');
+
+    const tokenTags = (wv.tokens || []).map((t, i) =>
+      `<span class="wv-token ${wv.in_vocab[i] ? 'in-vocab' : 'oov'}">${t}</span>`
+    ).join('');
+
+    const mean = vec.length ? (vec.reduce((a,b)=>a+b,0)/vec.length).toFixed(4) : 'N/A';
+
+    wvWrap.innerHTML = `
+      <div class="emb-header">
+        <div class="emb-title">Word2Vec <span style="font-weight:400; text-transform:none; letter-spacing:0">(mean-pooled)</span></div>
+        <div class="emb-meta">${wv.vector_size} dims · ${Math.round(wv.coverage * 100)}% vocab coverage</div>
+      </div>
+      <div class="wv-tokens">${tokenTags}</div>
+      <div class="emb-heatmap">${cells}</div>
+      <div class="emb-stats">
+        <div class="emb-stat">min <span>${minV.toFixed(4)}</span></div>
+        <div class="emb-stat">max <span>${maxV.toFixed(4)}</span></div>
+        <div class="emb-stat">mean <span>${mean}</span></div>
+        <div class="emb-stat">coverage <span>${Math.round(wv.coverage*100)}%</span></div>
+      </div>
+      <div style="margin-top:8px; font-size:10px; color:var(--text3);">
+        <span style="display:inline-block;background:rgba(62,207,122,0.12);color:var(--green);border:1px solid var(--green-border);padding:1px 6px;border-radius:3px;font-family:var(--font-mono);">green</span> = in vocab &nbsp;
+        <span style="display:inline-block;background:var(--bg4);color:var(--text3);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:var(--font-mono);">grey</span> = OOV (excluded from mean)
+      </div>`;
+  }
+}
+
+/** Map normalized [0,1] to a cool-warm color: deep blue → red → gold */
+function vecColor(t) {
+  // Use a blue-red-yellow gradient
+  if (t < 0.5) {
+    // blue → red
+    const u = t * 2;
+    const r = Math.round(26 + u * (178 - 26));
+    const g = Math.round(42 + u * (31 - 42));
+    const b = Math.round(108 + u * (31 - 108));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    // red → gold
+    const u = (t - 0.5) * 2;
+    const r = Math.round(178 + u * (253 - 178));
+    const g = Math.round(31 + u * (187 - 31));
+    const b = Math.round(31 + u * (45 - 31));
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+// ── Checkpoints ──
+async function loadCheckpoints() {
+  const list = document.getElementById('ckpt-list');
+  list.innerHTML = '<div style="color:var(--text3); font-size:13px;">Loading…</div>';
+  try {
+    const r = await fetch('/api/checkpoints');
+    const d = await r.json();
+    if (!d.checkpoints || d.checkpoints.length === 0) {
+      list.innerHTML = '<div style="color:var(--text3); font-size:13px;">No checkpoints found in outputs/.</div>';
+      return;
+    }
+    list.innerHTML = d.checkpoints.map(c => `
+      <div class="ckpt-row">
+        <div class="ckpt-name">${c.name}</div>
+        <div style="font-size:11px; color:var(--text3); font-family:var(--font-mono);">${c.size_mb} MB</div>
+        <span class="ckpt-badge loaded">saved</span>
+      </div>`).join('');
+    document.getElementById('session-info').innerHTML =
+      `Last training: <span style="font-family:var(--font-mono); color:var(--text);">${d.last_trained || 'unknown'}</span>`;
+  } catch(e) {
+    list.innerHTML = '<div style="color:var(--text3); font-size:13px;">Server offline. Start server.py to see checkpoints.</div>';
+  }
+}
+
+// ── Toast ──
+function toast(msg, dur = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── Init ──
+window.addEventListener('resize', renderLossChart);
+renderLossChart();
+</script>
+</body>
+</html>
