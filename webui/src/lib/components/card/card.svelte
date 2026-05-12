@@ -1,19 +1,20 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
-    import type { HTMLAttributes } from 'svelte/elements';
-	let { children, ...rest } : { children: Snippet } & HTMLAttributes<HTMLDivElement> = $props();
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
+	let { children, ...rest }: { children: Snippet } & HTMLAttributes<HTMLDivElement> = $props();
 </script>
 
 <div {...rest}>
-    {@render children()}
+	{@render children()}
 </div>
 
 <style>
-    div {
+	div {
 		background: var(--bg2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		padding: 20px 22px;
 		margin-bottom: 16px;
-    }
+		max-width: 100%;
+	}
 </style>

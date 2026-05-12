@@ -1,19 +1,22 @@
 
 
+export type InferenceResultType = {
+    sentence_transformer_encode_time: number;
+    sentence_transformer_embedding: number[];
+}
 
-
-class WebuiClient {
+export class WebuiClient {
     webuiServerHost: string;
 
-    constructor(webuiServerHost: string = "localhost:1111") {
+    constructor(webuiServerHost: string = "http://localhost:1111") {
         this.webuiServerHost = webuiServerHost;
     }
 
     _buildURL(endpoint: string) {
-        return `htts://${}${endpoint}`;
+        return `${this.webuiServerHost}${endpoint}`;
     }
 
-    async _post<RequestType, ResultType>(endpoint: string, body: RequestType) : Promise<ResultType> {
+    async _post<ResultType>(endpoint: string, body: unknown) : Promise<ResultType> {
         const result = await fetch(
             this._buildURL(endpoint), 
             {
@@ -25,11 +28,12 @@ class WebuiClient {
             });
         
         if(result.status !== 200) throw new Error(result.statusText);
-        return JSON.stringify(result.body) as ResultType;
+        
+        return result.json() as ResultType;
     }
 
     async runAllInferences(input: string) {
-        return await this._post("/api/infer/all", {
+        return await this._post<InferenceResultType>("/api/infer/all", {
             input
         });
     }

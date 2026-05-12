@@ -1,7 +1,26 @@
 from fastapi import FastAPI
-from pydantic import *
+from pydantic import BaseModel
+import random
+from fastapi.middleware.cors import CORSMiddleware
+
+from sentence_transformers import SentenceTransformer
+
+from function_timer import timeit
 
 app = FastAPI()
+
+origins = [
+    "http://localhost",
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
@@ -10,13 +29,33 @@ async def root():
 
 class InferenceRequest(BaseModel):
     input: str = ""
+    
+class InferenceResponse(BaseModel):
+    # input: str = ""
+    sentence_transformer_encode_time: float = 0.0
+    sentence_transformer_embedding: list[float] = []
+
+
+print("Loading Sentence Transformer...")
+sentence_embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+
+
+@timeit
+def encode_using_sentence_transformer(input: str):
+    return sentence_embedding_model.encode(input)
+
+
 
 @app.post("/api/infer/all")
-def infer_all(request: InferenceRequest):
+def infer_all(request: InferenceRequest) -> InferenceResponse:
     print("Infering... ", request.input)
-
-
-
+    sentence_transformer_embedding, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
+    
+    
+    return InferenceResponse(
+        sentence_transformer_encode_time = sentence_transformer_encode_time,
+        sentence_transformer_embedding = sentence_transformer_embedding
+    )
 
 
 # """

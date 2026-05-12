@@ -1,11 +1,9 @@
 <script lang="ts">
-    import type { HTMLAttributes } from 'svelte/elements';
-	let props : { rows: number } & HTMLAttributes<HTMLTextAreaElement> = $props();
+	import type { HTMLAttributes } from 'svelte/elements';
+	let props: { rows?: number; value?: string } & HTMLAttributes<HTMLTextAreaElement> = $props();
 </script>
 
-<textarea
-    {...props}
-></textarea>
+<textarea {...props}></textarea>
 
 <style>
 	textarea {
