@@ -4,6 +4,42 @@ import pandas as pd
 from transformers import AutoTokenizer
 
 from tqdm import tqdm
+from typing import Callable
+class KaggleDatasets:
+    def __init__(self, 
+                 filepath: str,
+                 transforms: dict[str, any]):
+        self.data = pd.read_csv(filepath)
+
+        for title, transform in transforms.items():
+            self.data[title] = [
+                transform(x)
+                for x in tqdm(self.dataset.data["text"])
+            ]
+        
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx: str):
+        return PandasColumnDataset(self.data, idx, "target")
+
+class PandasColumnDataset:
+    def __init__(self, data:pd.DataFrame, input_column:str, output_column: str = "target"):
+        self.data = data
+        self.input_column = input_column
+        self.output_column = output_column
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+            
+        sample = (self.data[self.input_column][idx], self.data[self.output_column][idx])
+
+        return sample
+
 
 class KaggleSpamDataset(Dataset):
     def __init__(self, filepath: str, transform=None):
@@ -43,26 +79,6 @@ class EmbeddingDataset(Dataset):
             idx = idx.tolist()
         sample = (self.data.iloc[idx, 0], self.data.iloc[idx, 1])
         return sample
-
-
-# class DatasetTransformer(Dataset):
-#     def __init__(self, dataset):
-#         self.dataset = dataset
-
-#     def __len__(self):
-#         return len(self.data)
-
-#     def __getitem__(self, idx):
-#         if torch.is_tensor(idx):
-#             idx = idx.tolist()
-            
-#         sample = (self.data.iloc[idx, 0], self.data.iloc[idx, 1])
-
-#         if self.transform:
-#             sample = self.transform.forward(sample)
-
-#         return sample
-
 class EmbeddingTransform(torch.nn.Module):
     def __init__(self, model):
         super(EmbeddingTransform, self).__init__()
@@ -91,9 +107,7 @@ class ToTensor(torch.nn.Module):
 
     def forward(self, sample):
         texts, labels = sample
-        # if(type(texts) == str):
         return torch.as_tensor(texts), torch.as_tensor(labels)
-        # return list(map(torch.as_tensor, texts)), torch.as_tensor(labels)
     
     
 

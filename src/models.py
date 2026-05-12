@@ -26,8 +26,6 @@ class SimpleRNN(nn.Module):
         out = self.output_layer(out[:, -1, :])
         return out
 
-
-
 class NeuralNetwork(nn.Module):
     def __init__(self, 
             input_size: int,
