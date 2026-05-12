@@ -35,6 +35,7 @@ class InferenceResponse(BaseModel):
     # input: str = ""
     sentence_transformer_encode_time: float = 0.0
     sentence_transformer_embedding: list[float] = []
+    what: any
 
 
 
@@ -44,20 +45,25 @@ inferencer = Inferencer()
 
 @timeit
 def encode_using_sentence_transformer(input: str):
-    return sentence_embedding_model.encode(input)
+    return inferencer.make_inference(input)
 
 
 
 @app.post("/api/infer/all")
 def infer_all(request: InferenceRequest) -> InferenceResponse:
     print("Infering... ", request.input)
-    sentence_transformer_embedding, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
+
+    something, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
+    sentence_transformer_embedding = something["sentence_transformer_embedding"]
+
+    # sentence_transformer_embedding, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
     
 
     
     return InferenceResponse(
         sentence_transformer_encode_time = sentence_transformer_encode_time,
-        sentence_transformer_embedding = sentence_transformer_embedding
+        sentence_transformer_embedding = sentence_transformer_embedding,
+        what=something
     )
 
 

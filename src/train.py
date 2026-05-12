@@ -69,6 +69,49 @@ def build_classifiers(x, input_size: int | None = None):
         build(a)
     for a in x ]
 
+def test_classifiers(dataset, classifiers, suffix: str, metrics, batch_size: int, preprocessing_time: float=0.0):
+    n_samples = len(dataset)
+    train_size = int(n_samples * 0.8)
+    val_size = n_samples - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    for title, classifier in classifiers:
+        title += suffix
+        print(f"\nBuilding loaders...")
+        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=batch_size)
+
+        print(f"\nTraining {title}...")
+        start = time.perf_counter()
+        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+        end = time.perf_counter()
+        train_time = end - start
+
+        print(f"\nEvaluating {title}...")
+        start = time.perf_counter()
+        train_metrics = classifier.evaluate(train_loader)
+        val_metrics = classifier.evaluate(val_loader)
+        end = time.perf_counter()
+        inference_time = end - start
+        
+        print("\nMetrics:")
+        print(f"Train time: {train_time} seconds")
+        print(f"Inference time: {inference_time} seconds")
+        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
+        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
+        metrics[title] = {
+            "title": title,
+            "validation": val_metrics,
+            "train": train_metrics,
+            "train_total_time": train_time + preprocessing_time,
+            "train_time_per_sample": train_time / n_samples,
+            "inference_total_time": inference_time + preprocessing_time,
+            "inference_time_per_sample": inference_time / n_samples,
+        }
+
+        if(train_losses is not None):
+            metrics[title]["train_losses"] = train_losses
+        if(val_losses is not None):
+            metrics[title]["val_losses"] = val_losses
 
 if __name__ == "__main__":
     dataset = KaggleSpamDataset("./data/combined.csv")
@@ -81,276 +124,67 @@ if __name__ == "__main__":
         )
     end = time.perf_counter()
     preprocessing_time = end - start
-    
-    n_samples = len(dataset)
-    train_size = int(n_samples * 0.8)
-    val_size = n_samples - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
     metrics = {}
-    classifiers = build_classifiers(sklearn_classifiers)
-    for title, classifier in classifiers:
-        title += " (SentenceTransformer)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=64)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time,
-            "train_time_per_sample": train_time / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-        }
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
-        
-        
-        
-        
-    classifiers = build_classifiers(nn_classifiers, input_size=384)
-    for title, classifier in classifiers:
-        title += " (SentenceTransformer)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=256)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time * EPOCHS,
-            "train_time_per_sample": (train_time + preprocessing_time * EPOCHS) / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-            "train_losses": train_losses,
-            "val_losses": val_losses,
-        }
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
-        
-        
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(sklearn_classifiers),
+        suffix=" (SentenceTransformer)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(nn_classifiers, input_size=384),
+        suffix=" (SentenceTransformer)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
+    
     dataset = KaggleSpamDataset("./data/combined.csv")
 
     start = time.perf_counter()
     dataset = Word2VecDataset(dataset)
     end = time.perf_counter()
     preprocessing_time = end - start
-    
-    n_samples = len(dataset)
-    train_size = int(n_samples * 0.8)
-    val_size = n_samples - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    
-    classifiers = build_classifiers(sklearn_classifiers)
-    for title, classifier in classifiers:
-        title += " (Trained Word2Vec)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=64)
 
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time,
-            "train_time_per_sample": train_time / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-        }
-        
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
-        
-        
-    classifiers = build_classifiers(nn_classifiers, input_size=128)
-    for title, classifier in classifiers:
-        title += " (Trained Word2Vec)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=256)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time * EPOCHS,
-            "train_time_per_sample": (train_time + preprocessing_time * EPOCHS) / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-            "train_losses": train_losses,
-            "val_losses": val_losses,
-        }
-        
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
-        
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(sklearn_classifiers),
+        suffix=" (Trained Word2Vec)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(nn_classifiers, input_size=384),
+        suffix=" (Trained Word2Vec)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
         
     dataset = KaggleSpamDataset("./data/combined.csv")
+
     import gensim.downloader
     model = gensim.downloader.load('glove-wiki-gigaword-300', return_path=False)
     start = time.perf_counter()
     dataset = Word2VecDataset(dataset, model=model)
     end = time.perf_counter()
     preprocessing_time = end - start
-    
-    n_samples = len(dataset)
-    train_size = int(n_samples * 0.8)
-    val_size = n_samples - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    
-    classifiers = build_classifiers(sklearn_classifiers)
-    for title, classifier in classifiers:
-        title += " (Pretrained Word2Vec)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=64)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time,
-            "train_time_per_sample": train_time / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-        }
-        
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
-        
-        
-    classifiers = build_classifiers(nn_classifiers, input_size=300)
-    for title, classifier in classifiers:
-        title += " (Pretrained Word2Vec)"
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=256)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time * EPOCHS,
-            "train_time_per_sample": (train_time + preprocessing_time * EPOCHS) / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-            "train_losses": train_losses,
-            "val_losses": val_losses,
-        }
-    
-        
-        # with open(f"./outputs/models/{title}.pkl", "wb") as f:
-        #     pickle.dump(classifier.model, f)
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(sklearn_classifiers),
+        suffix=" (Pretrained Word2Vec)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(nn_classifiers, input_size=384),
+        suffix=" (Pretrained Word2Vec)",
+        metrics=metrics,
+        batch_size=256,
+        preprocessing_time=preprocessing_time)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     dataset = KaggleSpamDataset("./data/combined.csv",
@@ -358,66 +192,16 @@ if __name__ == "__main__":
             TokenizerTransform(tokenizer),
             ToTensor()
         ))
-    
-    n_samples = len(dataset)
-    train_size = int(n_samples * 0.8)
-    val_size = n_samples - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-    classifiers = build_classifiers(tokenizing_classifiers, input_size=30522)
-    for title, classifier in classifiers:
-        print(f"\nBuilding loaders...")
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=True,
-            collate_fn=pad_collate_fn,
-        )
-        val_loader = torch.utils.data.DataLoader(
-            val_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=False,
-            collate_fn=pad_collate_fn,
-        )
-
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=1e-7, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
-        
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time,
-            "train_time_per_sample": train_time / n_samples,
-            "inference_total_time": inference_time,
-            "inference_time_per_sample": inference_time / n_samples,
-            "train_losses": train_losses,
-            "val_losses": val_losses,
-            # "parameter_count": sum(p.numel() for p in classifier.model.parameters() if p.requires_grad)
-        }
-
-
-    
-
+    # test_classifiers(
+    #     dataset=dataset, 
+    #     classifiers=build_classifiers(tokenizing_classifiers, input_size=30522),
+    #     suffix="",
+    #     metrics=metrics,
+    #     batch_size=256,
+    #     preprocessing_time=preprocessing_time)
 
     print(metrics)
-    
     
     with open("outputs/results.csv", "w") as f:
         f.write(f"title,val_loss,val_accuracy,val_f1,val_precision,val_recall,train_loss,train_accuracy,train_f1,train_precision,train_recall,train_total_time,train_time_per_sample,inference_total_time,inference_time_per_sample\n")
@@ -428,8 +212,6 @@ if __name__ == "__main__":
             for k2, v2 in v["train"].items():
                 f.write(f"{v2},")
             f.write(f"{v["train_total_time"]},{v["train_time_per_sample"]},{v["inference_total_time"]},{v["inference_time_per_sample"]}\n")
-    
-            
     
     with open("outputs/losses.csv", "w") as f:
         with_losses = [ v for k,v in metrics.items() if "train_losses" in v]

@@ -9,7 +9,10 @@ class Trainer:
     def __init__(self, model: Any):
         raise NotImplemented()
     
-    def train(self, train_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], val_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], **kwargs) -> tuple[list[float], list[float]]:
+    def train(self, train_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], val_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], **kwargs) -> tuple[list[float]|None, list[float]|None]:
+        raise NotImplemented()
+    
+    def inference(self, x: np.ndarray) -> np.ndarray:
         raise NotImplemented()
     
     def evaluate(self, data_loader: Iterable[tuple[torch.Tensor, torch.Tensor]]) -> dict[str, Any]:
@@ -24,6 +27,8 @@ class SklearnTrainer(Trainer):
 
     def forward(self, x: np.ndarray) -> np.ndarray:
         return self.model.predict(x)
+    def inference(self, x: np.ndarray) -> np.ndarray:
+        return self.model.predict(x)
 
     def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, **kwargs): # type: ignore
         return torch.utils.data.DataLoader(train_dataset, batch_size=len(train_dataset), shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
@@ -31,7 +36,7 @@ class SklearnTrainer(Trainer):
     def train(self, train_loader, val_loader, **kwargs):
         X, y = next(iter(train_loader))
         self.model.fit(X, y)
-        return [], []
+        return None, None
     
     def evaluate(self, data_loader):
         all_preds = []
@@ -73,15 +78,17 @@ class SklearnTrainer(Trainer):
     
 class TorchTrainer(Trainer):
     def __init__(self, model: torch.nn.Module):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = model
 
     def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, batch_size=1, **kwargs):
         return torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
+    def inference(self, x: np.ndarray) -> np.ndarray:
+        return self.model.forward(torch.as_tensor(x).to(self.device)).cpu().numpy()
+    
     def train(self, train_loader, val_loader, device=None, epochs=100, lr=0.1, weight_decay=0.01, **kwargs):
-        if device is None:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = self.model.to(device)
+        model = self.model.to(self.device)
 
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)

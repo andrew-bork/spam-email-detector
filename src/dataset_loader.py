@@ -5,11 +5,12 @@ from transformers import AutoTokenizer
 
 from tqdm import tqdm
 from typing import Callable
+
 class KaggleDatasets:
     def __init__(self, 
-                 filepath: str,
+                 data: pd.Dataframe,
                  transforms: dict[str, any]):
-        self.data = pd.read_csv(filepath)
+        self.data = data
 
         for title, transform in transforms.items():
             self.data[title] = [
@@ -23,7 +24,7 @@ class KaggleDatasets:
     def __getitem__(self, idx: str):
         return PandasColumnDataset(self.data, idx, "target")
 
-class PandasColumnDataset:
+class PandasColumnDataset(Dataset):
     def __init__(self, data:pd.DataFrame, input_column:str, output_column: str = "target"):
         self.data = data
         self.input_column = input_column
@@ -117,14 +118,32 @@ class ToTensor(torch.nn.Module):
         return torch.as_tensor(texts), torch.as_tensor(labels)
     
 
-def tokenize(s: str):
+def tokenize_by_word(s: str):
     return regex.split("\\w+", s.lower())
 
+
+
+class Word2VecTransform(torch.nn.Module):
+    def __init__(self, model):
+        super(EmbeddingTransform, self).__init__()
+        self.model = model
+        self.model.wv = model
+
+    def forward(self, sample: str):
+        tokens = tokenize_by_word(sample)
+        vecs = [self.model.wv[t] for t in tokens if t in self.model.wv]
+        
+        if not vecs:
+            return torch.zeros(300)
+
+        mat = np.vstack(vecs)
+        return torch.as_tensor(mat.mean(axis=0).astype(np.float32))
+    
 class Word2VecDataset(Dataset):
     def __init__(self, dataset: Dataset, model: Word2Vec | None = None):
         self.dataset = dataset
         
-        corpus = [tokenize(t) for t in self.dataset.data["text"]]
+        corpus = [tokenize_by_word(t) for t in self.dataset.data["text"]]
 
         if(model is None):
             self.model = Word2Vec(
@@ -157,7 +176,7 @@ class Word2VecDataset(Dataset):
         return sample
 
     def _embed(self, x: str):
-        tokens = tokenize(x)
+        tokens = tokenize_by_word(x)
         vecs = [self.model.wv[t] for t in tokens if t in self.model.wv]
         
         if not vecs:
@@ -166,7 +185,13 @@ class Word2VecDataset(Dataset):
         mat = np.vstack(vecs)
         return torch.as_tensor(mat.mean(axis=0).astype(np.float32))
 
-        
+
+def split_train_val(dataset: Dataset, train_portion:float = 0.8):
+    n_samples = len(dataset)
+    train_size = int(n_samples * train_portion)
+    val_size = n_samples - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    return train_dataset, val_dataset
         
     
 
