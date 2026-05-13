@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 from typing import Iterable
 from typing import Any
+import time
 
 class Trainer:
     def __init__(self, model: Any):
@@ -12,8 +13,15 @@ class Trainer:
     def train(self, train_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], val_loader: Iterable[tuple[torch.Tensor, torch.Tensor]], **kwargs) -> tuple[list[float]|None, list[float]|None]:
         raise NotImplemented()
     
-    def inference(self, x: np.ndarray) -> np.ndarray:
+    def inference(self, x: np.ndarray) -> bool:
         raise NotImplemented()
+    
+    def timed_inference(self, x: np.ndarray) -> tuple[bool, float]:
+        start_time = time.perf_counter()
+        result = self.inference(x)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        return (result, total_time)
     
     def evaluate(self, data_loader: Iterable[tuple[torch.Tensor, torch.Tensor]]) -> dict[str, Any]:
         raise NotImplemented()
@@ -27,8 +35,8 @@ class SklearnTrainer(Trainer):
 
     def forward(self, x: np.ndarray) -> np.ndarray:
         return self.model.predict(x)
-    def inference(self, x: np.ndarray) -> np.ndarray:
-        return self.model.predict(x)
+    def inference(self, x: np.ndarray) -> bool:
+        return np.squeeze(self.model.predict(np.expand_dims(x, axis=0))) == 1
 
     def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, **kwargs): # type: ignore
         return torch.utils.data.DataLoader(train_dataset, batch_size=len(train_dataset), shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
@@ -84,8 +92,10 @@ class TorchTrainer(Trainer):
     def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, batch_size=1, **kwargs):
         return torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    def inference(self, x: np.ndarray) -> np.ndarray:
-        return self.model.forward(torch.as_tensor(x).to(self.device)).cpu().numpy()
+    def inference(self, x: np.ndarray) -> bool:
+        with torch.no_grad():
+            result = self.model.forward(torch.as_tensor(x).to(self.device)).cpu()
+            return torch.argmax(result) == 1
     
     def train(self, train_loader, val_loader, device=None, epochs=100, lr=0.1, weight_decay=0.01, **kwargs):
         model = self.model.to(self.device)

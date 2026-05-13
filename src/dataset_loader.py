@@ -127,7 +127,7 @@ def tokenize_by_word(s: str):
 
 class Word2VecTransform(torch.nn.Module):
     def __init__(self, model):
-        super(EmbeddingTransform, self).__init__()
+        super(Word2VecTransform, self).__init__()
         self.model = model
         self.model.wv = model
 
