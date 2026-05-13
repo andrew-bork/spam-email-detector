@@ -35,8 +35,6 @@ class InferenceResponse(BaseModel):
     # input: str = ""
     sentence_transformer_encode_time: float = 0.0
     sentence_transformer_embedding: list[float] = []
-    what: any
-
 
 
 

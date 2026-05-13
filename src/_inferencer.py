@@ -19,6 +19,8 @@ EPOCHS = 100
 LOG_INTERVAL = 1
 BATCH_SIZE = 1
 
+from typing import Any
+
 sklearn_classifiers: list[tuple[str, Any, type[Trainer], dict[str, Any]]] = [
     # ("Simple RNN", SimpleRNN, TorchTrainer, {"embedding_input_size": 30522}),
     ("SVM", svm.SVC, SklearnTrainer, {}),
@@ -91,13 +93,16 @@ class Inferencer:
 
             classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     
+    
+    # def
+    
     def make_inference(self, input: str):
         output = {}
 
         sentence_transformer_embedding = self.sentence_embedding_model.encode(input).numpy()
 
-        for k, c in self.sentence_transformer_classifiers.items():
-            output[k] = c.inference(sentence_transformer_embedding)
+        # for k, c in self.sentence_transformer_classifiers.items():
+        #     output[k] = c.inference(sentence_transformer_embedding)
         
         output["sentence_transformer_embedding"] = sentence_transformer_embedding
         return output

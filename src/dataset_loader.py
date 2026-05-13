@@ -6,16 +6,18 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 from typing import Callable
 
+from typing import Any
+
 class KaggleDatasets:
     def __init__(self, 
-                 data: pd.Dataframe,
-                 transforms: dict[str, any]):
+                 data: pd.DataFrame,
+                 transforms: dict[str, Any]):
         self.data = data
 
         for title, transform in transforms.items():
             self.data[title] = [
                 transform(x)
-                for x in tqdm(self.dataset.data["text"])
+                for x in tqdm(self.data["text"])
             ]
         
     def __len__(self):
