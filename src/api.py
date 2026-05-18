@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer
 
 from function_timer import timeit
-from _inferencer import Inferencer
+from _inferencer import Inferencer, InferencerResults
 
 app = FastAPI()
 
@@ -31,14 +31,11 @@ async def root():
 class InferenceRequest(BaseModel):
     input: str = ""
     
-class InferenceResponse(BaseModel):
-    # input: str = ""
-    sentence_transformer_encode_time: float = 0.0
-    sentence_transformer_embedding: list[float] = []
+# class InferenceResponse(BaseModel):
+#     results: InferencerResults
 
 
-
-inferencer = Inferencer()
+inferencer = Inferencer.load_inferencer("./outputs/inferencer.pkl")
 
 
 @timeit
@@ -48,21 +45,8 @@ def encode_using_sentence_transformer(input: str):
 
 
 @app.post("/api/infer/all")
-def infer_all(request: InferenceRequest) -> InferenceResponse:
-    print("Infering... ", request.input)
-
-    something, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
-    sentence_transformer_embedding = something["sentence_transformer_embedding"]
-
-    # sentence_transformer_embedding, sentence_transformer_encode_time = encode_using_sentence_transformer(request.input)
-    
-
-    
-    return InferenceResponse(
-        sentence_transformer_encode_time = sentence_transformer_encode_time,
-        sentence_transformer_embedding = sentence_transformer_embedding,
-        what=something
-    )
+def infer_all(request: InferenceRequest) -> InferencerResults:
+    return inferencer.make_inference(request.input)
 
 
 # """

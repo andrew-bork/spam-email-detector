@@ -6,23 +6,19 @@
 	import SecondaryButton from '$lib/components/button/secondary-button.svelte';
 	import { WebuiClient, type InferenceResultType } from '$lib/server';
 	import EmbeddingView from '$lib/components/view/embedding-view.svelte';
+	import EmbeddingDecisionView from '$lib/components/view/embedding-decision-view.svelte';
 
-	let inferenceResult = $state({
-		sentence_transformer_embedding: [],
-		sentence_transformer_encode_time: 0
-	} as InferenceResultType);
+	let inferenceResult = $state(null as InferenceResultType | null);
 	let inferenceInput = $state('');
 	const canRunInference = $derived(0 < inferenceInput.trim().length);
 </script>
 
 <div class="shell">
 	<main class="page">
-		<div class="page-title">Run Inference</div>
-		<div class="page-sub">Classify text using all models.</div>
+		<!-- <div class="page-title">Run Inference</div> -->
+		<!-- <div class="page-sub">Classify text using all models.</div> -->
 
 		<Card>
-			<div class="page-title">Run Inference</div>
-			<div class="page-sub">Classify text using all models.</div>
 			<CardTitle>Input</CardTitle>
 			<CardTitle style="margin-bottom:8px; font-size:10px;">Try an example</CardTitle>
 
@@ -67,7 +63,22 @@
 
 		<Card>
 			<CardTitle>Inference Results</CardTitle>
-			{#if inferenceResult.sentence_transformer_embedding.length == 0}
+			{#if inferenceResult != null}
+				<EmbeddingDecisionView
+					results={inferenceResult.sentence_transformer}
+					title="Sentence Transformer"
+				/>
+				<EmbeddingDecisionView
+					results={inferenceResult.word_t_vec_trained}
+					title="Trained Word2Vec"
+				/>
+				<EmbeddingDecisionView
+					results={inferenceResult.word_t_vec_pretrained}
+					title="Pretrained Word2Vec"
+				/>
+			{/if}
+			<!-- <CardTitle>Inference Results</CardTitle>
+			{#if inferenceResult.sentence_transformer.embedding.length == 0}
 				<div>No results yet.</div>
 			{:else}
 				<div class="embedding-title">
@@ -77,7 +88,7 @@
 				<div class="inference-time">
 					Embedding took {(inferenceResult.sentence_transformer_encode_time * 1000).toFixed(1)} milliseconds.
 				</div>
-			{/if}
+			{/if} -->
 		</Card>
 	</main>
 </div>

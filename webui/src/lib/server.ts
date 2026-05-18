@@ -1,8 +1,64 @@
 
 
+
+// class SimpleDecision(BaseModel):
+//     calculation_time: float
+//     decision: bool
+
+// class NearbyNeighbor(BaseModel):
+//     text: str
+//     distance: float
+//     is_spam: bool
+
+// class NearestNeighborsDecision(SimpleDecision):
+//     nearest_neighbors: list[NearbyNeighbor]
+
+// class EmbeddingClassifierResults(BaseModel):
+//     embedding: list[float]
+//     embedding_calculation_time: float
+
+//     svm: SimpleDecision
+//     # nearest_neighbors_euclidean: SimpleDecision
+//     # nearest_neighbors_minkowski: SimpleDecision
+//     # nearest_neighbors_cosine: SimpleDecision
+//     nearest_neighbors_euclidean: NearestNeighborsDecision
+//     nearest_neighbors_minkowski: NearestNeighborsDecision
+//     nearest_neighbors_cosine: NearestNeighborsDecision
+//     naive_bayes: SimpleDecision
+//     logistic_regression: SimpleDecision
+//     neural_network: SimpleDecision
+    
+// class InferencerResults(BaseModel):
+//     sentence_transformer: EmbeddingClassifierResults
+
+export type SimpleDecision = {
+    calculation_time: number;
+    decision: boolean;
+};
+export type NearbyNeighbor = {
+    text: string;
+    distance: number;
+    is_spam: boolean;
+}
+export type NearestNeighborsDecision = SimpleDecision & {
+    nearest_neighbors: NearbyNeighbor[]
+};
+export type EmbeddingClassifierResults = {
+    embedding: number[];
+    embedding_calculation_time: number;
+    svm: SimpleDecision;
+    naive_bayes: SimpleDecision;
+    logistic_regression: SimpleDecision;
+    neural_network: SimpleDecision;
+    nearest_neighbors_euclidean: NearestNeighborsDecision;
+    nearest_neighbors_minkowski: NearestNeighborsDecision;
+    nearest_neighbors_cosine: NearestNeighborsDecision;
+}
+
 export type InferenceResultType = {
-    sentence_transformer_encode_time: number;
-    sentence_transformer_embedding: number[];
+    sentence_transformer: EmbeddingClassifierResults;
+    word_t_vec_trained: EmbeddingClassifierResults;
+    word_t_vec_pretrained: EmbeddingClassifierResults;
 }
 
 export class WebuiClient {

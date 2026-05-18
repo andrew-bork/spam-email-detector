@@ -85,6 +85,7 @@ class SklearnTrainer(Trainer):
     
     
 class TorchTrainer(Trainer):
+    model: torch.nn.Module
     def __init__(self, model: torch.nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = model
@@ -112,7 +113,7 @@ class TorchTrainer(Trainer):
             model.train()
             for (X_batch, y_batch) in tqdm(train_loader):
                 X_batch = torch.as_tensor(X_batch)
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
                 optimizer.zero_grad()
                 outputs = model(X_batch)
                 loss = criterion(outputs, y_batch)
@@ -131,7 +132,7 @@ class TorchTrainer(Trainer):
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
                     X_batch = torch.as_tensor(X_batch)
-                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                    X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
                     outputs = model(X_batch)
                     val_loss += criterion(outputs, y_batch).item()
                     predictions = torch.argmax(outputs, dim=1)
@@ -185,3 +186,15 @@ class TorchTrainer(Trainer):
         }
         
         return metrics
+    
+    def save(self, filename: str):
+        torch.save(self.model, filename)
+    
+    @classmethod
+    def load(cls, filename: str):
+        return cls(torch.load(filename))
+        
+
+
+
+

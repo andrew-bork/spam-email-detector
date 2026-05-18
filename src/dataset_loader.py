@@ -25,6 +25,13 @@ class KaggleDatasets:
 
     def __getitem__(self, idx: str):
         return PandasColumnDataset(self.data, idx, "target")
+    
+    def save(self, filename: str):
+        torch.save(self.data, filename)
+        
+    @classmethod
+    def load(cls, filename: str):
+        return cls(torch.load(filename, weights_only=False), {})
 
 class PandasColumnDataset(Dataset):
     def __init__(self, data:pd.DataFrame, input_column:str, output_column: str = "target"):
@@ -43,6 +50,10 @@ class PandasColumnDataset(Dataset):
 
         return sample
 
+    def get_raw_sample(self, idx):
+        return (self.data["text"][idx], self.data["target"][idx])
+        
+    
 
 from gensim.models import Word2Vec
 from gensim.utils import simple_preprocess
@@ -129,7 +140,7 @@ class Word2VecTransform(torch.nn.Module):
     def __init__(self, model):
         super(Word2VecTransform, self).__init__()
         self.model = model
-        self.model.wv = model
+        # self.model.wv = model
 
     def forward(self, sample: str):
         tokens = tokenize_by_word(sample)
