@@ -195,6 +195,109 @@ class TorchTrainer(Trainer):
         return cls(torch.load(filename))
         
 
+from dataset_loader import Dataset, split_train_val
+from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer, DataCollatorWithPadding, AutoTokenizer
+
+import evaluate
+
+accuracy = evaluate.load("accuracy")
 
 
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    predictions = np.argmax(predictions, axis=1)
+    return accuracy.compute(predictions=predictions, references=labels)
+class HuggingFaceTrainer(Trainer):
+    def __init__(self, **kwargs):
+        id2label = {0: "HAM", 1: "SPAM"}
+        label2id = {"HAM": 0, "SPAM": 1}
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
+    
+    def train(self, dataset: Dataset) -> tuple[list[float]|None, list[float]|None]:
+        train, val = split_train_val(dataset, 0.8)
 
+        training_args = TrainingArguments(
+            output_dir="my_awesome_model",
+            learning_rate=2e-5,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=16,
+            num_train_epochs=2,
+            weight_decay=0.01,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            load_best_model_at_end=True,
+            push_to_hub=True,
+        )
+
+        trainer = Trainer(
+            model=self.model,
+            args=training_args,
+            train_dataset=train,
+            eval_dataset=val,
+            processing_class=self.tokenizer,
+            data_collator=DataCollatorWithPadding(),
+            compute_metrics=compute_metrics,
+        )
+
+        trainer.train()
+
+    
+    def inference(self, x: str) -> bool:
+        inputs = self.tokenizer(x, return_tensors="pt")
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+            return logits.argmax().item() == 1
+        
+    def _inference(self, x: list[str]) -> np.ndarray:
+        inputs = self.tokenizer(x, return_tensors="pt")
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+            return logits
+    
+    def timed_inference(self, x: np.ndarray) -> tuple[bool, float]:
+        start_time = time.perf_counter()
+        result = self.inference(x)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        return (result, total_time)
+    
+    def evaluate(self, data_loader: Iterable[tuple[torch.Tensor, torch.Tensor]]) -> dict[str, Any]:
+        
+        all_preds = []
+        all_targets = []
+        
+        total_loss = 0
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for X_batch, y_batch in tqdm(data_loader):
+            # X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = self._inference(X_batch)
+            total_loss += criterion(outputs, y_batch).item()
+            predictions = torch.argmax(outputs, dim=1)
+            all_preds.append(predictions.cpu().numpy())
+            all_targets.append(y_batch.cpu().numpy())
+        
+        all_preds = np.concat(all_preds)
+        all_targets = np.concat(all_targets)
+        
+        accuracy = (all_preds == all_targets).sum() / len(all_preds)
+        f1 = f1_score(all_targets, all_preds, average="macro")
+        precision = precision_score(all_targets, all_preds, average="macro")
+        recall = recall_score(all_targets, all_preds, average="macro")
+        
+        
+        metrics = {
+            'loss': total_loss / len(data_loader),
+            'accuracy': accuracy,
+            'f1_macro': f1,
+            "precision_macro": precision,
+            "recall_macro": recall
+        }
+        
+        return metrics
+    
+    def build_loaders(self, train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset, batch_size: int, **kwargs) -> tuple[Iterable[tuple[torch.Tensor, torch.Tensor]], Iterable[tuple[torch.Tensor, torch.Tensor]]]:
+        return  torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True), torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

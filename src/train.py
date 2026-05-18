@@ -201,30 +201,32 @@ if __name__ == "__main__":
     #     batch_size=256,
     #     preprocessing_time=preprocessing_time)
 
+
+
     print(metrics)
     
-    with open("outputs/results.csv", "w") as f:
-        f.write(f"title,val_loss,val_accuracy,val_f1,val_precision,val_recall,train_loss,train_accuracy,train_f1,train_precision,train_recall,train_total_time,train_time_per_sample,inference_total_time,inference_time_per_sample\n")
-        for k,v in metrics.items():
-            f.write(f"\"{k}\",")
-            for k2, v2 in v["validation"].items():
-                f.write(f"{v2},")
-            for k2, v2 in v["train"].items():
-                f.write(f"{v2},")
-            f.write(f"{v["train_total_time"]},{v["train_time_per_sample"]},{v["inference_total_time"]},{v["inference_time_per_sample"]}\n")
+    # with open("outputs/results.csv", "w") as f:
+    #     f.write(f"title,val_loss,val_accuracy,val_f1,val_precision,val_recall,train_loss,train_accuracy,train_f1,train_precision,train_recall,train_total_time,train_time_per_sample,inference_total_time,inference_time_per_sample\n")
+    #     for k,v in metrics.items():
+    #         f.write(f"\"{k}\",")
+    #         for k2, v2 in v["validation"].items():
+    #             f.write(f"{v2},")
+    #         for k2, v2 in v["train"].items():
+    #             f.write(f"{v2},")
+    #         f.write(f"{v["train_total_time"]},{v["train_time_per_sample"]},{v["inference_total_time"]},{v["inference_time_per_sample"]}\n")
     
-    with open("outputs/losses.csv", "w") as f:
-        with_losses = [ v for k,v in metrics.items() if "train_losses" in v]
-        for v in with_losses:
-            f.write(f"\"{v["title"]} Train\",")
-            f.write(f"\"{v["title"]} Val\",")
-        f.write("\n")
+    # with open("outputs/losses.csv", "w") as f:
+    #     with_losses = [ v for k,v in metrics.items() if "train_losses" in v]
+    #     for v in with_losses:
+    #         f.write(f"\"{v["title"]} Train\",")
+    #         f.write(f"\"{v["title"]} Val\",")
+    #     f.write("\n")
         
-        for i in range(EPOCHS):
-            for v in with_losses:
-                f.write(f"{v["train_losses"][i]},")
-                f.write(f"{v["val_losses"][i]},")
-            f.write("\n")
+    #     for i in range(EPOCHS):
+    #         for v in with_losses:
+    #             f.write(f"{v["train_losses"][i]},")
+    #             f.write(f"{v["val_losses"][i]},")
+    #         f.write("\n")
     
     
     # visualize(metrics)
