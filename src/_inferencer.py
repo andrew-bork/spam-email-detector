@@ -6,7 +6,7 @@ import gensim.downloader
 
 import pandas as pd
 
-from trainer import TorchTrainer, SklearnTrainer, Trainer
+from trainer import TorchTrainer, SklearnTrainer, Trainer, TrainingOptions
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn import svm
@@ -75,11 +75,15 @@ class EmbeddingClassifierResults(BaseModel):
     naive_bayes: SimpleDecision
     logistic_regression: SimpleDecision
     neural_network: SimpleDecision
+
+class NonEmbeddingClassifiersResults(BaseModel):
+    bert_classifier: SimpleDecision
     
 class InferencerResults(BaseModel):
     sentence_transformer: EmbeddingClassifierResults
     word_t_vec_trained: EmbeddingClassifierResults
     word_t_vec_pretrained: EmbeddingClassifierResults
+    non_embedding: NonEmbeddingClassifiersResults
 
 
 def build_classifiers(output, x, input_size: int | None = None, suffix:str = ""):
@@ -124,7 +128,7 @@ class Inferencer:
         self.word_t_vec_trained_inferencer = EmbeddingInferencer(Word2VecTransform(self.word_t_vec_trained), self.datasets["word_t_vec_trained"], 300)
         self.word_t_vec_pretrained_inferencer = EmbeddingInferencer(Word2VecTransform(self.word_t_vec_pretrained), self.datasets["word_t_vec_pretrained"], 300)
         
-
+        self.non_embedding_classifiers = NonEmbeddingInferencer(self.datasets["text"])
 
     def fit(self):
         # self.sentence_transformer_inferencer.fit()
@@ -134,7 +138,8 @@ class Inferencer:
         return InferencerResults(
             sentence_transformer=self.sentence_transformer_inferencer.make_inference(input),
             word_t_vec_trained=self.word_t_vec_trained_inferencer.make_inference(input),
-            word_t_vec_pretrained=self.word_t_vec_pretrained_inferencer.make_inference(input)
+            word_t_vec_pretrained=self.word_t_vec_pretrained_inferencer.make_inference(input),
+            non_embedding=self.non_embedding_classifiers.make_inference(input)
         )
 
     @classmethod
@@ -181,20 +186,56 @@ class KNNInferencer:
             nearest_neighbors=nearest_neighbors,
             decision=2 < class_total
         )
+from bert_trainer import BERTTrainer
+class NonEmbeddingInferencer:
+    def __init__(self, dataset):
+        self.bert = BERTTrainer(model_name="bert-base-uncased", max_length=128)
+        
+        self.bert_options = TrainingOptions(
+            batch_size=256,
+            epochs=3,
+            learning_rate=2e-5,
+            weight_decay=0.01
+        )
+        
+        train_loader, val_loader = self.bert.build_loaders(
+            dataset, options=self.bert_options
+        )
+        
+        self.bert.train(
+            train_loader, val_loader, options=self.bert_options
+        )
+    
+    def make_inference(self, input: str) -> NonEmbeddingClassifiersResults:
+        bert_decision, bert_calculation_time = self.bert.timed_inference(input)
+        return NonEmbeddingClassifiersResults(
+            bert_classifier=SimpleDecision(
+                decision=bert_decision,
+                calculation_time=bert_calculation_time
+            )
+        )
+        
 
+        
 
 class EmbeddingInferencer:
     def __init__(self, embedder, dataset, input_size):
         self.embedder = embedder
         self.dataset = dataset
-        train_dataset, val_dataset = split_train_val(dataset)
         self.classifiers = {}
         build_classifiers(self.classifiers, sklearn_classifiers, suffix=" (Sentence Transformer)")
         build_classifiers(self.classifiers, nn_classifiers, suffix=" (Sentence Transformer)", input_size=input_size)
         
+        self.options = TrainingOptions(
+            batch_size=256,
+            epochs=20,
+            learning_rate=2e-5,
+            weight_decay=0.01
+        )
+        
         for classifier in self.classifiers.values():
-            train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=256)
-            classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+            train_loader, val_loader = classifier.build_loaders(dataset, options=self.options)
+            classifier.train(train_loader, val_loader, options=self.options)
 
 # knns = [
 #     ("knn_euclidean", { "metric": "euclidean" }),

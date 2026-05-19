@@ -1,6 +1,5 @@
 
 
-
 // class SimpleDecision(BaseModel):
 //     calculation_time: float
 //     decision: bool
@@ -27,10 +26,15 @@
 //     naive_bayes: SimpleDecision
 //     logistic_regression: SimpleDecision
 //     neural_network: SimpleDecision
+
+// class NonEmbeddingClassifiersResults(BaseModel):
+//     bert_classifier: SimpleDecision
     
 // class InferencerResults(BaseModel):
 //     sentence_transformer: EmbeddingClassifierResults
-
+//     word_t_vec_trained: EmbeddingClassifierResults
+//     word_t_vec_pretrained: EmbeddingClassifierResults
+//     non_embedding: NonEmbeddingClassifiersResults
 export type SimpleDecision = {
     calculation_time: number;
     decision: boolean;
@@ -55,10 +59,14 @@ export type EmbeddingClassifierResults = {
     nearest_neighbors_cosine: NearestNeighborsDecision;
 }
 
+export type NonEmbeddingClassifiersResults = {
+    bert_classifier: SimpleDecision
+}
 export type InferenceResultType = {
     sentence_transformer: EmbeddingClassifierResults;
     word_t_vec_trained: EmbeddingClassifierResults;
     word_t_vec_pretrained: EmbeddingClassifierResults;
+    non_embedding: NonEmbeddingClassifiersResults;
 }
 
 export class WebuiClient {

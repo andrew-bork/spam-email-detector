@@ -1,22 +1,18 @@
 from dataset_loader import KaggleSpamDataset, TokenizerTransform, ToTensor, EmbeddingDataset, EmbeddingTransform, Word2VecDataset
 from models import SimpleRNN, LinearRegression, NeuralNetwork, SimpleLSTM
 import torch
-from tqdm import tqdm
 from transformers import AutoTokenizer
-from sklearn.metrics import f1_score
 import time
 
-from trainer import TorchTrainer, SklearnTrainer, Trainer
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
+from trainer import TorchTrainer, SklearnTrainer, Trainer, TrainingOptions, TrainingMetrics
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn import svm
-from typing import Callable, Any
+from typing import Any
 
 from sentence_transformers import SentenceTransformer
 
 from torch.nn.utils.rnn import pad_sequence
-
-import pickle
 
 LEARNING_RATE = 1e-6
 WEIGHT_DECAY = 1e-10
@@ -25,7 +21,6 @@ LOG_INTERVAL = 1
 BATCH_SIZE = 1
 
 sklearn_classifiers: list[tuple[str, Any, type[Trainer], dict[str, Any]]] = [
-    # ("Simple RNN", SimpleRNN, TorchTrainer, {"embedding_input_size": 30522}),
     ("SVM", svm.SVC, SklearnTrainer, {}),
     ("Nearest Neighbors (Euclidean)", KNeighborsClassifier, SklearnTrainer, { "metric": "euclidean" }),
     ("Nearest Neighbors (Minkowski)", KNeighborsClassifier, SklearnTrainer, { "metric": "minkowski" }),
@@ -44,14 +39,6 @@ tokenizing_classifiers: list[tuple[str, Any, type[Trainer], dict[str, Any]]] = [
 ]
 
 def pad_collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor]]):
-    """
-    Collate variable-length token sequences into a padded batch.
- 
-    Each item in `batch` is (token_ids: 1-D LongTensor, label: 0-D LongTensor).
-    Returns:
-        padded : (batch_size, max_seq_len)  — zero-padded (padding_idx=0 in Embedding)
-        labels : (batch_size,)
-    """
     sequences, labels = zip(*batch)
     padded  = pad_sequence(sequences, batch_first=True, padding_value=0)  # (B, T)
     labels  = torch.stack(labels)                                          # (B,)
@@ -69,49 +56,22 @@ def build_classifiers(x, input_size: int | None = None):
         build(a)
     for a in x ]
 
-def test_classifiers(dataset, classifiers, suffix: str, metrics, batch_size: int, preprocessing_time: float=0.0):
-    n_samples = len(dataset)
-    train_size = int(n_samples * 0.8)
-    val_size = n_samples - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-
+def test_classifiers(dataset, classifiers: list[tuple[str, Trainer]], suffix: str, metrics, options: TrainingOptions, preprocessing_time: float=0.0):
     for title, classifier in classifiers:
         title += suffix
-        print(f"\nBuilding loaders...")
-        train_loader, val_loader = classifier.build_loaders(train_dataset, val_dataset, batch_size=batch_size)
-
-        print(f"\nTraining {title}...")
-        start = time.perf_counter()
-        train_losses, val_losses = classifier.train(train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        end = time.perf_counter()
-        train_time = end - start
-
-        print(f"\nEvaluating {title}...")
-        start = time.perf_counter()
-        train_metrics = classifier.evaluate(train_loader)
-        val_metrics = classifier.evaluate(val_loader)
-        end = time.perf_counter()
-        inference_time = end - start
+        print(f"Running {title}")
+        out = classifier.run(dataset, options)
+        out.training_time += preprocessing_time
+        out.inference_time += preprocessing_time
+        metrics[title] = out
         
-        print("\nMetrics:")
-        print(f"Train time: {train_time} seconds")
-        print(f"Inference time: {inference_time} seconds")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, F1: {train_metrics['f1_macro']:.4f}, Accuracy: {100*train_metrics['accuracy']:.2f}%, Precision: {train_metrics['precision_macro']}, Recall: {train_metrics['recall_macro']}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, F1: {val_metrics['f1_macro']:.4f}, Accuracy: {100*val_metrics['accuracy']:.2f}%, Precision: {val_metrics['precision_macro']}, Recall: {val_metrics['recall_macro']}")
-        metrics[title] = {
-            "title": title,
-            "validation": val_metrics,
-            "train": train_metrics,
-            "train_total_time": train_time + preprocessing_time,
-            "train_time_per_sample": train_time / n_samples,
-            "inference_total_time": inference_time + preprocessing_time,
-            "inference_time_per_sample": inference_time / n_samples,
-        }
-
-        if(train_losses is not None):
-            metrics[title]["train_losses"] = train_losses
-        if(val_losses is not None):
-            metrics[title]["val_losses"] = val_losses
+        for k, v in out.model_dump().items():
+            if(type(v) == type({})):
+                print(f"  {k}:")
+                for k2, v2 in v.items():
+                    print(f"    {k2}: {v2:.4f}")
+            elif(type(v) != type([])):
+                print(f"  {k}: {v:.4f}")
 
 if __name__ == "__main__":
     dataset = KaggleSpamDataset("./data/combined.csv")
@@ -125,20 +85,25 @@ if __name__ == "__main__":
     end = time.perf_counter()
     preprocessing_time = end - start
 
-    metrics = {}
+    metrics: dict[str, TrainingMetrics] = {}
     test_classifiers(
         dataset=dataset, 
         classifiers=build_classifiers(sklearn_classifiers),
         suffix=" (SentenceTransformer)",
+        options=TrainingOptions(
+            
+        ),
         metrics=metrics,
-        batch_size=256,
         preprocessing_time=preprocessing_time)
     test_classifiers(
         dataset=dataset, 
         classifiers=build_classifiers(nn_classifiers, input_size=384),
         suffix=" (SentenceTransformer)",
         metrics=metrics,
-        batch_size=256,
+        options=TrainingOptions(
+            epochs=20,
+            learning_rate=2e-5
+        ),
         preprocessing_time=preprocessing_time)
     
     dataset = KaggleSpamDataset("./data/combined.csv")
@@ -153,14 +118,19 @@ if __name__ == "__main__":
         classifiers=build_classifiers(sklearn_classifiers),
         suffix=" (Trained Word2Vec)",
         metrics=metrics,
-        batch_size=256,
+        options=TrainingOptions(
+            
+        ),
         preprocessing_time=preprocessing_time)
     test_classifiers(
         dataset=dataset, 
-        classifiers=build_classifiers(nn_classifiers, input_size=384),
+        classifiers=build_classifiers(nn_classifiers, input_size=300),
         suffix=" (Trained Word2Vec)",
         metrics=metrics,
-        batch_size=256,
+        options=TrainingOptions(
+            epochs=20,
+            learning_rate=2e-5
+        ),
         preprocessing_time=preprocessing_time)
         
     dataset = KaggleSpamDataset("./data/combined.csv")
@@ -176,14 +146,18 @@ if __name__ == "__main__":
         classifiers=build_classifiers(sklearn_classifiers),
         suffix=" (Pretrained Word2Vec)",
         metrics=metrics,
-        batch_size=256,
+        options=TrainingOptions(
+        ),
         preprocessing_time=preprocessing_time)
     test_classifiers(
         dataset=dataset, 
-        classifiers=build_classifiers(nn_classifiers, input_size=384),
+        classifiers=build_classifiers(nn_classifiers, input_size=300),
         suffix=" (Pretrained Word2Vec)",
         metrics=metrics,
-        batch_size=256,
+        options=TrainingOptions(
+            epochs=20,
+            learning_rate=2e-5
+        ),
         preprocessing_time=preprocessing_time)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
@@ -193,27 +167,26 @@ if __name__ == "__main__":
             ToTensor()
         ))
 
-    # test_classifiers(
-    #     dataset=dataset, 
-    #     classifiers=build_classifiers(tokenizing_classifiers, input_size=30522),
-    #     suffix="",
-    #     metrics=metrics,
-    #     batch_size=256,
-    #     preprocessing_time=preprocessing_time)
-
-
+    test_classifiers(
+        dataset=dataset, 
+        classifiers=build_classifiers(tokenizing_classifiers, input_size=30522),
+        suffix="",
+        metrics=metrics,
+        options=TrainingOptions(
+            epochs=20,
+            learning_rate=1e-6,
+            batch_size=16
+        ),
+        preprocessing_time=preprocessing_time)
 
     print(metrics)
     
-    # with open("outputs/results.csv", "w") as f:
-    #     f.write(f"title,val_loss,val_accuracy,val_f1,val_precision,val_recall,train_loss,train_accuracy,train_f1,train_precision,train_recall,train_total_time,train_time_per_sample,inference_total_time,inference_time_per_sample\n")
-    #     for k,v in metrics.items():
-    #         f.write(f"\"{k}\",")
-    #         for k2, v2 in v["validation"].items():
-    #             f.write(f"{v2},")
-    #         for k2, v2 in v["train"].items():
-    #             f.write(f"{v2},")
-    #         f.write(f"{v["train_total_time"]},{v["train_time_per_sample"]},{v["inference_total_time"]},{v["inference_time_per_sample"]}\n")
+    with open("outputs/results.csv", "w") as f:
+        f.write(f"title,val_loss,val_accuracy,val_f1,val_precision,val_recall,train_loss,train_accuracy,train_f1,train_precision,train_recall,train_total_time,train_time_per_sample,inference_total_time,inference_time_per_sample\n")
+        
+        for k,v in metrics.items():
+            f.write(f"\"{k}\",")
+            f.write(f"{v.validation_metrics.loss},{v.validation_metrics.accuracy},{v.validation_metrics.f1_macro},{v.validation_metrics.precision_macro},{v.validation_metrics.recall_macro},{v.training_metrics.loss},{v.training_metrics.accuracy},{v.training_metrics.f1_macro},{v.training_metrics.precision_macro},{v.training_metrics.recall_macro},{v.training_time},{v.training_time/len(dataset)},{v.inference_time},{v.inference_time/len(dataset)}")
     
     # with open("outputs/losses.csv", "w") as f:
     #     with_losses = [ v for k,v in metrics.items() if "train_losses" in v]

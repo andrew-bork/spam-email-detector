@@ -1,25 +1,3 @@
-"""
-bert_trainer.py
-
-A HuggingFace BERT sequence-classification trainer that plugs into the
-existing Trainer interface (train / inference / timed_inference / evaluate /
-build_loaders).
-
-Key design decisions
---------------------
-* The existing DataLoaders yield (text: str, label: int) pairs for raw-text
-  datasets, so tokenization happens inside the collate function rather than
-  up-front.  This keeps the trainer self-contained and avoids a separate
-  pre-processing step.
-* `inference(x: str)` accepts a raw string (overriding the np.ndarray
-  signature from the base class) because BERT operates on text, not
-  pre-computed embeddings.
-* Mixed-precision training (torch.autocast) is used automatically when a
-  CUDA device is available.
-* Early stopping (patience-based on validation loss) is supported via the
-  `patience` kwarg to `train()`.
-"""
-
 from __future__ import annotations
 
 import time
@@ -36,8 +14,8 @@ from transformers import (
 )
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-# ── Re-use the base class from the project's trainer module ──────────────────
-from trainer import Trainer
+from trainer import Trainer, TrainingOptions, EvaluationMetrics
+from dataset_loader import split_train_val
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -62,7 +40,7 @@ def _make_collate_fn(tokenizer: AutoTokenizer, max_length: int):
             truncation=True,
             max_length=max_length,
             return_tensors="pt",
-        )
+        ) # type: ignore
         label_tensor = torch.tensor(
             [int(l) for l in labels], dtype=torch.long
         )
@@ -73,20 +51,6 @@ def _make_collate_fn(tokenizer: AutoTokenizer, max_length: int):
 
 # ── Trainer ───────────────────────────────────────────────────────────────────
 class BERTTrainer(Trainer):
-    """
-    Fine-tunes a BERT (or any AutoModelForSequenceClassification) model for
-    binary spam / ham classification.
-
-    Parameters
-    ----------
-    model_name : str
-        HuggingFace model identifier, e.g. ``"bert-base-uncased"``.
-    num_labels : int
-        Number of output classes (default 2).
-    max_length : int
-        Token sequence length used during tokenization (default 128).
-    """
-
     def __init__(
         self,
         model_name: str = DEFAULT_MODEL_NAME,
@@ -108,25 +72,21 @@ class BERTTrainer(Trainer):
     # ── DataLoader factory ────────────────────────────────────────────────────
     def build_loaders(
         self,
-        train_dataset: Dataset,
-        val_dataset: Dataset,
-        batch_size: int = 16,
-        **kwargs,
+        dataset: Dataset,
+        options: TrainingOptions
     ) -> tuple[DataLoader, DataLoader]:
-        """
-        Build DataLoaders that tokenize on-the-fly via a collate function.
-        The underlying datasets must yield ``(text: str, label: int)`` pairs.
-        """
+        train_dataset, validation_dataset = split_train_val(dataset)
+        
         collate = _make_collate_fn(self.tokenizer, self.max_length)
         train_loader = DataLoader(
             train_dataset,
-            batch_size=batch_size,
+            batch_size=options.batch_size,
             shuffle=True,
             collate_fn=collate,
         )
         val_loader = DataLoader(
-            val_dataset,
-            batch_size=batch_size,
+            validation_dataset,
+            batch_size=options.batch_size,
             shuffle=False,
             collate_fn=collate,
         )
@@ -135,43 +95,22 @@ class BERTTrainer(Trainer):
     # ── Training ──────────────────────────────────────────────────────────────
     def train(
         self,
-        train_loader: Iterable,
-        val_loader: Iterable,
-        epochs: int = 3,
-        lr: float = 2e-5,
-        weight_decay: float = 0.01,
-        warmup_ratio: float = 0.1,
-        patience: int = 3,
-        **kwargs,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        options: TrainingOptions
+        # epochs: int = 3,
+        # lr: float = 2e-5,
+        # weight_decay: float = 0.01,
+        # warmup_ratio: float = 0.1,
+        # patience: int = 3,
+        # **kwargs,
     ) -> tuple[list[float], list[float]]:
-        """
-        Fine-tune BERT with a linear warm-up schedule and optional early stopping.
-
-        Parameters
-        ----------
-        train_loader, val_loader : DataLoader
-            Produced by :meth:`build_loaders`.
-        epochs : int
-            Maximum number of training epochs (default 3; BERT converges fast).
-        lr : float
-            Peak learning rate (default 2e-5, typical for BERT fine-tuning).
-        weight_decay : float
-            AdamW weight decay (default 0.01).
-        warmup_ratio : float
-            Fraction of total steps used for linear LR warm-up (default 0.1).
-        patience : int
-            Early-stopping patience in epochs; set to ``epochs`` to disable.
-
-        Returns
-        -------
-        train_losses, val_losses : list[float]
-        """
         model = self.model
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=lr, weight_decay=weight_decay
+            model.parameters(), lr=options.learning_rate, weight_decay=options.weight_decay
         )
-        total_steps = len(train_loader) * epochs
-        warmup_steps = int(total_steps * warmup_ratio)
+        total_steps = len(train_loader) * options.epochs
+        warmup_steps = int(total_steps * options.warmup_ratio)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
             num_warmup_steps=warmup_steps,
@@ -186,12 +125,12 @@ class BERTTrainer(Trainer):
         best_val_loss = float("inf")
         epochs_no_improve = 0
 
-        for epoch in range(epochs):
+        for epoch in range(options.epochs):
             # ── Train ──────────────────────────────────────────────────────
             model.train()
             epoch_loss = 0.0
             for encoding, labels in tqdm(
-                train_loader, desc=f"Epoch {epoch+1}/{epochs} [train]", leave=False
+                train_loader, desc=f"Epoch {epoch+1}/{options.epochs} [train]", leave=False
             ):
                 encoding = {k: v.to(self.device) for k, v in encoding.items()}
                 labels = labels.to(self.device)
@@ -207,6 +146,7 @@ class BERTTrainer(Trainer):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 # scaler.step(optimizer)
                 # scaler.update()
+                optimizer.step()
                 scheduler.step()
                 epoch_loss += loss.item()
 
@@ -218,7 +158,7 @@ class BERTTrainer(Trainer):
             val_losses.append(avg_val)
 
             print(
-                f"Epoch [{epoch+1}/{epochs}]  "
+                f"Epoch [{epoch+1}/{options.epochs}]  "
                 f"Train Loss: {avg_train:.4f}  "
                 f"Val Loss: {avg_val:.4f}  "
                 f"Val Acc: {100 * val_acc:.2f}%"
@@ -234,7 +174,7 @@ class BERTTrainer(Trainer):
                 }
             else:
                 epochs_no_improve += 1
-                if epochs_no_improve >= patience:
+                if epochs_no_improve >= options.patience:
                     print(f"Early stopping triggered after epoch {epoch+1}.")
                     break
 
@@ -248,19 +188,6 @@ class BERTTrainer(Trainer):
 
     # ── Inference ─────────────────────────────────────────────────────────────
     def inference(self, x: str) -> bool:  # type: ignore[override]
-        """
-        Classify a single raw text string.
-
-        Parameters
-        ----------
-        x : str
-            The email / message text.
-
-        Returns
-        -------
-        bool
-            ``True`` if the model predicts SPAM (class index 1).
-        """
         self.model.eval()
         encoding = self.tokenizer(
             x,
@@ -280,7 +207,7 @@ class BERTTrainer(Trainer):
         return result, time.perf_counter() - start
 
     # ── Evaluation ────────────────────────────────────────────────────────────
-    def evaluate(self, data_loader: Iterable) -> dict[str, Any]:
+    def evaluate(self, data_loader: DataLoader) -> EvaluationMetrics:
         """
         Compute loss, accuracy, F1, precision, and recall over a DataLoader.
 
@@ -307,49 +234,37 @@ class BERTTrainer(Trainer):
 
         all_preds_np = np.concatenate(all_preds)
         all_targets_np = np.concatenate(all_targets)
-
-        accuracy = (all_preds_np == all_targets_np).mean()
-        return {
-            "loss": total_loss / max(len(data_loader), 1),
-            "accuracy": float(accuracy),
-            "f1_macro": f1_score(all_targets_np, all_preds_np, average="macro"),
-            "precision_macro": precision_score(
-                all_targets_np, all_preds_np, average="macro", zero_division=0
-            ),
-            "recall_macro": recall_score(
-                all_targets_np, all_preds_np, average="macro", zero_division=0
-            ),
-        }
+        return self._calculate_metrics(all_preds_np, all_targets_np, total_loss)
 
     # ── Persistence ───────────────────────────────────────────────────────────
-    def save(self, directory: str) -> None:
-        """Save model + tokenizer to *directory* (HuggingFace format)."""
-        self.model.save_pretrained(directory)
-        self.tokenizer.save_pretrained(directory)
+    # def save(self, directory: str) -> None:
+    #     """Save model + tokenizer to *directory* (HuggingFace format)."""
+    #     self.model.save_pretrained(directory)
+    #     self.tokenizer.save_pretrained(directory)
 
-    @classmethod
-    def load(cls, directory: str, max_length: int = DEFAULT_MAX_LENGTH) -> "BERTTrainer":
-        """
-        Reload a fine-tuned model saved with :meth:`save`.
+    # @classmethod
+    # def load(cls, directory: str, max_length: int = DEFAULT_MAX_LENGTH) -> "BERTTrainer":
+    #     """
+    #     Reload a fine-tuned model saved with :meth:`save`.
 
-        Example
-        -------
-        >>> trainer = BERTTrainer.load("outputs/bert_spam")
-        >>> trainer.inference("Congratulations! You've won a prize.")
-        True
-        """
-        instance = cls.__new__(cls)
-        instance.max_length = max_length
-        instance.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        instance.tokenizer = AutoTokenizer.from_pretrained(directory)
-        instance.model = AutoModelForSequenceClassification.from_pretrained(
-            directory
-        ).to(instance.device)
-        instance.model_name = directory
-        return instance
+    #     Example
+    #     -------
+    #     >>> trainer = BERTTrainer.load("outputs/bert_spam")
+    #     >>> trainer.inference("Congratulations! You've won a prize.")
+    #     True
+    #     """
+    #     instance = cls.__new__(cls)
+    #     instance.max_length = max_length
+    #     instance.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     instance.tokenizer = AutoTokenizer.from_pretrained(directory)
+    #     instance.model = AutoModelForSequenceClassification.from_pretrained(
+    #         directory
+    #     ).to(instance.device)
+    #     instance.model_name = directory
+    #     return instance
 
     # ── Private helpers ───────────────────────────────────────────────────────
-    def _val_loss_and_acc(self, val_loader: Iterable) -> tuple[float, float]:
+    def _val_loss_and_acc(self, val_loader: DataLoader) -> tuple[float, float]:
         self.model.eval()
         criterion = torch.nn.CrossEntropyLoss()
         total_loss, correct, total = 0.0, 0, 0
@@ -370,34 +285,37 @@ class BERTTrainer(Trainer):
 if __name__ == "__main__":
     from dataset_loader import KaggleSpamDataset, split_train_val
     from train import test_classifiers
+    import time
 
     EPOCHS = 3
     BATCH_SIZE = 16
 
     print("Loading dataset...")
     dataset = KaggleSpamDataset("./data/emails.csv")
+    
+    options = TrainingOptions(
+        epochs=EPOCHS,
+        learning_rate=2e-5,
+        weight_decay=0.01,
+        batch_size=BATCH_SIZE
+    )
 
     trainer = BERTTrainer(model_name="bert-base-uncased", max_length=128)
-    train_ds, val_ds = split_train_val(dataset, train_portion=0.8)
-    train_loader, val_loader = trainer.build_loaders(
-        train_ds, val_ds, batch_size=BATCH_SIZE
-    )
-
-    print("Training...")
-    train_losses, val_losses = trainer.train(
-        train_loader, val_loader,
-        epochs=EPOCHS, lr=2e-5, weight_decay=0.01,
-    )
-
-    print("\nFinal evaluation:")
-    metrics = trainer.evaluate(val_loader)
-    for k, v in metrics.items():
-        print(f"  {k}: {v:.4f}")
+    metrics = trainer.run(dataset, options)
+    for k, v in metrics.model_dump().items():
+        if(type(v) == type({})):
+            print(f"  {k}:")
+            for k2, v2 in v.items():
+                print(f"    {k2}: {v2:.4f}")
+        elif(type(v) != type([])):
+            print(f"  {k}: {v:.4f}")
+    
+    print(metrics.inference_time / len(dataset))
 
     print("\nSingle inference:")
     sample = "Congratulations! You have been selected for a free prize. Click here now!"
     print(f"  Input : {sample!r}")
     print(f"  Spam? : {trainer.inference(sample)}")
 
-    trainer.save("outputs/bert_spam_model")
+    # trainer.save("outputs/bert_spam_model")
     print("\nModel saved to outputs/bert_spam_model/")

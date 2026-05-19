@@ -8,6 +8,11 @@ from typing import Callable
 
 from typing import Any
 
+from typing import TypeVar, Generic
+
+T = TypeVar('T')
+M = TypeVar('M')
+
 class KaggleDatasets:
     def __init__(self, 
                  data: pd.DataFrame,
@@ -180,7 +185,7 @@ class Word2VecDataset(Dataset):
         self.data["task_index"] = self.dataset.data["task_index"]
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.dataset) # type: ignore
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
@@ -199,8 +204,8 @@ class Word2VecDataset(Dataset):
         return torch.as_tensor(mat.mean(axis=0).astype(np.float32))
 
 
-def split_train_val(dataset: Dataset, train_portion:float = 0.8):
-    n_samples = len(dataset)
+def split_train_val(dataset: Dataset[T], train_portion:float = 0.8):
+    n_samples = len(dataset) # type: ignore
     train_size = int(n_samples * train_portion)
     val_size = n_samples - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])

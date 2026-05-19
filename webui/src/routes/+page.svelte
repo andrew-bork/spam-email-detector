@@ -7,6 +7,7 @@
 	import { WebuiClient, type InferenceResultType } from '$lib/server';
 	import EmbeddingView from '$lib/components/view/embedding-view.svelte';
 	import EmbeddingDecisionView from '$lib/components/view/embedding-decision-view.svelte';
+	import SimpleDecisionView from '$lib/components/view/simple-decision-view.svelte';
 
 	let inferenceResult = $state(null as InferenceResultType | null);
 	let inferenceInput = $state('');
@@ -75,6 +76,10 @@
 				<EmbeddingDecisionView
 					results={inferenceResult.word_t_vec_pretrained}
 					title="Pretrained Word2Vec"
+				/>
+				<SimpleDecisionView
+					decision={inferenceResult.non_embedding.bert_classifier}
+					title="BERT Classifier"
 				/>
 			{/if}
 			<!-- <CardTitle>Inference Results</CardTitle>
